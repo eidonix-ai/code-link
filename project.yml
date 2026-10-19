@@ -1,0 +1,36 @@
+name: CodeLink
+options:
+  bundleIdPrefix: com.eidonix
+  deploymentTarget:
+    macOS: "15.0"
+  xcodeVersion: "27.0"
+packages:
+  CodeLinkEngine:
+    path: .
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    MACOSX_DEPLOYMENT_TARGET: "15.0"
+targets:
+  CodeLink:
+    type: application
+    platform: macOS
+    sources: [App]
+    dependencies:
+      - package: CodeLinkEngine
+    info:
+      path: App/Info.plist
+      properties:
+        CFBundleDisplayName: code-link
+        CFBundleShortVersionString: "0.1.0"
+        CFBundleVersion: "1"
+        LSUIElement: true
+        LSMinimumSystemVersion: "15.0"
+        NSAppleEventsUsageDescription: "code-link opens iTerm or Terminal to start Claude Code and Codex sessions."
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.eidonix.code-link
+        CODE_SIGN_IDENTITY: "-"
+        CODE_SIGN_STYLE: Manual
+        ENABLE_HARDENED_RUNTIME: NO
+        COMBINE_HIDPI_IMAGES: YES
