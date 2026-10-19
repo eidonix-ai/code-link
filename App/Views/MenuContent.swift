@@ -38,17 +38,13 @@ struct MenuContent: View {
 
         Divider()
 
-        Menu("Model: \(model.config.roles.main.isEmpty ? "none" : model.config.roles.main)") {
-            if model.config.models.isEmpty {
-                Text("No models configured")
-            } else {
-                Picker("Sonnet model", selection: Binding(
-                    get: { model.config.roles.main },
-                    set: { id in Task { await model.switchMain(to: id) } })) {
-                    ForEach(model.config.models) { Text($0.id).tag($0.id) }
-                }
-                .pickerStyle(.inline)
-            }
+        let menu = MenuModels.make(config: model.config)
+        if menu.groups.isEmpty {
+            Text("No models enabled — open Settings")
+        } else {
+            Menu("Sonnet: \(menu.sonnetTitle)") { slotItems(.main, menu) }.disabled(model.hasUnsavedChanges)
+            Menu("Opus: \(menu.opusTitle)") { slotItems(.opus, menu) }.disabled(model.hasUnsavedChanges)
+            Text(model.hasUnsavedChanges ? "Save or revert Settings to re-route" : "New sessions use this; running ones keep theirs")
         }
 
         Button("Copy Claude Code Command") { model.copyCommand(.claudeCode) }.disabled(!model.config.isConfigured)
@@ -61,6 +57,42 @@ struct MenuContent: View {
         }
         Button("Settings…") { model.openSettings() }.keyboardShortcut(",")
         Button("Quit code-link") { NSApplication.shared.terminate(nil) }.keyboardShortcut("q")
+    }
+}
+
+extension MenuContent {
+    /// Every enabled model grouped by provider, a checkmark on the current one.
+    @ViewBuilder func slotItems(_ slot: RoleSlot, _ menu: MenuModels) -> some View {
+        if slot == .opus {
+            Button { Task { await model.switchRole(.opus, to: nil) } } label: {
+                if menu.opusID == nil { Label("Same as Sonnet", systemImage: "checkmark") } else { Text("Same as Sonnet") }
+            }
+            Divider()
+        }
+        let current = slot == .main ? menu.sonnetID : menu.opusID
+        ForEach(menu.groups) { g in
+            Section(g.backendID) {
+                ForEach(g.items) { item in
+                    Button { Task { await model.switchRole(slot, to: item.modelID) } } label: {
+                        if item.modelID == current { Label(item.title, systemImage: "checkmark") } else { Text(item.title) }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// What the Sonnet and Opus submenus show.
+struct MenuModels: Equatable {
+    var groups: [ChoiceGroup]
+    var sonnetID: String?
+    var opusID: String?
+    var sonnetTitle: String { sonnetID ?? "none" }
+    var opusTitle: String { opusID ?? "same as Sonnet" }
+
+    static func make(config: EngineConfig) -> MenuModels {
+        MenuModels(groups: RoutingChoices.groups(config: config, enabledOnly: true),
+                   sonnetID: config.roles.main.isEmpty ? nil : config.roles.main, opusID: config.roles.opus)
     }
 }
 

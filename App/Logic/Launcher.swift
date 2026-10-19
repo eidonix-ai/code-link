@@ -34,14 +34,36 @@ struct Launcher {
 
     func openSync(command: String, folder: String?, preference: TerminalPreference) throws {
         let script = try writeScript(command: command, folder: folder)
-        if Self.useITerm(preference, itermInstalled: Self.itermInstalled, scriptPath: script),
-           (try? Self.osascript(Self.iTermScript, script)) != nil { return }
-        do { try Self.osascript(Self.terminalScript, ShellQuote.quote(script)) } catch {
-            try? FileManager.default.removeItem(atPath: script)
-            throw error
+        let plans = Self.plans(preference, itermInstalled: Self.itermInstalled, scriptPath: script)
+        var lastError: Error?
+        for plan in plans {
+            do { try Self.osascript(plan.appleScript, plan.argument); return } catch { lastError = error }
         }
+        try? FileManager.default.removeItem(atPath: script)
+        throw lastError ?? ScriptError(errorDescription: "No terminal could be opened.")
     }
 
+    /// One way of opening the script: the AppleScript and its single argument.
+    struct TerminalPlan: Equatable {
+        enum App: Equatable { case iTerm, terminal }
+        var app: App
+        var appleScript: String
+        var argument: String
+    }
+
+    /// The plans to try, in order. iTerm (when wanted, installed and the path
+    /// is plain) comes first with Terminal as the fallback; iTerm takes the
+    /// bare path as the session command, Terminal gets it shell-quoted.
+    static func plans(_ preference: TerminalPreference, itermInstalled: Bool, scriptPath: String) -> [TerminalPlan] {
+        var out: [TerminalPlan] = []
+        if useITerm(preference, itermInstalled: itermInstalled, scriptPath: scriptPath) {
+            out.append(TerminalPlan(app: .iTerm, appleScript: iTermScript, argument: scriptPath))
+        }
+        out.append(TerminalPlan(app: .terminal, appleScript: terminalScript, argument: ShellQuote.quote(scriptPath)))
+        return out
+    }
+
+    /// A new tab in iTerm's current window when there is one, else a new window.
     static let iTermScript = """
     on run argv
       tell application "iTerm2"
@@ -55,6 +77,7 @@ struct Launcher {
     end run
     """
 
+    /// A new Terminal window running the script.
     static let terminalScript = """
     on run argv
       tell application "Terminal"
