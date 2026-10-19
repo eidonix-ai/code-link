@@ -8,11 +8,16 @@ public struct EngineConfig: Codable, Sendable, Equatable {
     public var roles: Roles
     public var documents: DocumentsConfig
     public var webSearch: WebSearchConfig
+    /// How long to wait for a backend's response headers (for a
+    /// non-streaming request: the whole answer). nil = 600 s. A stream that
+    /// has started has no time limit.
+    public var headerTimeoutSeconds: Double?
 
     public init(port: Int = 18765, backends: [Backend] = [], models: [Model] = [], roles: Roles = Roles(main: ""),
-                documents: DocumentsConfig = DocumentsConfig(), webSearch: WebSearchConfig = WebSearchConfig()) {
+                documents: DocumentsConfig = DocumentsConfig(), webSearch: WebSearchConfig = WebSearchConfig(),
+                headerTimeoutSeconds: Double? = nil) {
         self.port = port; self.backends = backends; self.models = models; self.roles = roles
-        self.documents = documents; self.webSearch = webSearch
+        self.documents = documents; self.webSearch = webSearch; self.headerTimeoutSeconds = headerTimeoutSeconds
     }
 }
 
