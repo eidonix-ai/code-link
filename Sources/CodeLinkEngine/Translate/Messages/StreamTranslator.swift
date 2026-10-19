@@ -5,18 +5,28 @@ struct ChatUsage: Sendable, Equatable {
     var promptTokens = 0
     var completionTokens = 0
     var cachedTokens = 0
+    var reasoningTokens = 0
 
-    init(promptTokens: Int = 0, completionTokens: Int = 0, cachedTokens: Int = 0) {
-        self.promptTokens = promptTokens; self.completionTokens = completionTokens; self.cachedTokens = cachedTokens
+    init(promptTokens: Int = 0, completionTokens: Int = 0, cachedTokens: Int = 0, reasoningTokens: Int = 0) {
+        self.promptTokens = promptTokens; self.completionTokens = completionTokens
+        self.cachedTokens = cachedTokens; self.reasoningTokens = reasoningTokens
     }
     init?(_ j: JSON?) {
         guard let j, j.object != nil else { return nil }
         promptTokens = j["prompt_tokens"]?.int ?? 0
         completionTokens = j["completion_tokens"]?.int ?? 0
         cachedTokens = j["prompt_tokens_details"]?["cached_tokens"]?.int ?? 0
+        reasoningTokens = j["completion_tokens_details"]?["reasoning_tokens"]?.int ?? 0
     }
     mutating func add(_ o: ChatUsage) {
-        promptTokens += o.promptTokens; completionTokens += o.completionTokens; cachedTokens += o.cachedTokens
+        promptTokens += o.promptTokens; completionTokens += o.completionTokens
+        cachedTokens += o.cachedTokens; reasoningTokens += o.reasoningTokens
+    }
+    /// Responses API usage, with the cached and reasoning token details.
+    var responses: JSON {
+        ["input_tokens": .int(promptTokens), "input_tokens_details": ["cached_tokens": .int(cachedTokens)],
+         "output_tokens": .int(completionTokens), "output_tokens_details": ["reasoning_tokens": .int(reasoningTokens)],
+         "total_tokens": .int(promptTokens + completionTokens)]
     }
     /// Anthropic usage: cached prompt tokens are cache reads, not input.
     func anthropic(webSearches: Int? = nil) -> JSON {
@@ -42,12 +52,22 @@ func resolveStopReason(finish: String?, backendStop: String?, stopSequences: [St
     }
 }
 
+/// What one upstream line did to a translator.
+enum ChatLineResult { case more, doneMarker, failed }
+
+/// A translator fed a Chat Completions SSE stream one line at a time.
+protocol ChatLineConsumer: AnyObject {
+    func line(_ line: String) -> ChatLineResult
+    /// The finish reason the stream has delivered, if any.
+    var finishReason: String? { get }
+}
+
 /// Translates a Chat Completions SSE stream into Anthropic Messages events
 /// (docs/DESIGN.md §4.2), one upstream line at a time. In search mode one
 /// message spans several generations ("rounds", §4.5): the model's
 /// web_search calls are held back from the client and answered between
 /// rounds.
-final class StreamTranslator {
+final class StreamTranslator: ChatLineConsumer {
     static let signature = "code-link"
 
     final class ToolState {
@@ -113,7 +133,7 @@ final class StreamTranslator {
         emit("ping", [:])
     }
 
-    enum LineResult { case more, doneMarker, failed }
+    typealias LineResult = ChatLineResult
 
     /// One upstream line.
     func line(_ line: String) -> LineResult {

@@ -22,7 +22,12 @@ struct WebSearchLoop: Sendable {
 
     /// The Chat Completions request of a round.
     func request(round: Int, messages: [JSON]) -> JSON {
-        var r = call.chatReq
+        Self.request(call.chatReq, round: round, maxRounds: maxRounds, messages: messages)
+    }
+
+    /// The Chat Completions request of a round for any route's base request.
+    static func request(_ base: JSON, round: Int, maxRounds: Int, messages: [JSON]) -> JSON {
+        var r = base
         r["messages"] = .array(messages)
         if round >= maxRounds - 1 {
             r["tools"] = nil
