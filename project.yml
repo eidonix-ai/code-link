@@ -34,3 +34,25 @@ targets:
         CODE_SIGN_STYLE: Manual
         ENABLE_HARDENED_RUNTIME: NO
         COMBINE_HIDPI_IMAGES: YES
+  CodeLinkTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources: [Tests/CodeLinkTests]
+    dependencies:
+      - target: CodeLink
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.eidonix.code-link.tests
+        CODE_SIGN_IDENTITY: "-"
+        CODE_SIGN_STYLE: Manual
+        GENERATE_INFOPLIST_FILE: YES
+        BUNDLE_LOADER: "$(TEST_HOST)"
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/CodeLink.app/Contents/MacOS/CodeLink"
+schemes:
+  CodeLink:
+    build:
+      targets:
+        CodeLink: all
+        CodeLinkTests: [test]
+    test:
+      targets: [CodeLinkTests]
