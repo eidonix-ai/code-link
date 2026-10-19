@@ -56,7 +56,7 @@ struct WebSearchLoop: Sendable {
         t.start()
         var messages = call.chatReq["messages"]?.array ?? []
         var resp = first
-        defer { call.log(200) }
+        defer { call.log(t.failure?.status ?? 200) }
         for round in 0..<maxRounds {
             if round > 0 {
                 t.nextRound()

@@ -20,13 +20,18 @@ final class SSESink: Sendable {
     var isFinished: Bool { state.withLock { $0.finished } }
     var idle: Duration { ContinuousClock.now - state.withLock { $0.lastWrite } }
 
-    func raw(_ s: String) {
+    func raw(_ s: String) { write(ByteBuffer(string: s)) }
+
+    /// Bytes as they are (a native stream passed through).
+    func raw(bytes: Data) { write(ByteBuffer(bytes: bytes)) }
+
+    private func write(_ buffer: ByteBuffer) {
         let done = state.withLock { s -> Bool in
             if s.finished { return true }
             s.lastWrite = .now
             return false
         }
-        if !done { continuation.yield(ByteBuffer(string: s)) }
+        if !done { continuation.yield(buffer) }
     }
 
     /// `event: <name>` with `data` (its `type` set to the event name, first).

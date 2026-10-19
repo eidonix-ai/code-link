@@ -183,6 +183,30 @@ private let okCompletion: @Sendable (StubBackend.Seen, Int) -> StubBackend.Reply
         }
     }
 
+    @Test func longLinesPassIntact() async throws {
+        let big = String(repeating: "x", count: 2 << 20)
+        try await CoreHarness.run(backend: { _, _ in .sse([Chunks.content(big), Chunks.finish()]) }) { h in
+            let ev = try await h.messages(messagesBody(stream: true)).events
+            #expect(ev.compactMap { $0.data?["delta"]?["text"]?.string }.joined().count == big.count)
+            #expect(ev.last?.event == "message_stop")
+        }
+    }
+
+    @Test func lineReaderSplitsAndLimits() async throws {
+        func lines(_ chunks: [String], maxLine: Int) async throws -> [String] {
+            let (stream, cont) = AsyncThrowingStream.makeStream(of: Data.self, throwing: (any Error).self)
+            for c in chunks { cont.yield(Data(c.utf8)) }
+            cont.finish()
+            var r = LineReader(stream, maxLine: maxLine)
+            var out: [String] = []
+            while let l = try await r.next() { out.append(l) }
+            return out
+        }
+        #expect(try await lines(["a\r\nb", "\n\nc"], maxLine: 10) == ["a", "b", "", "c"])
+        #expect(try await lines(["data: h\u{e9}", "llo\n"], maxLine: 10) == ["data: h\u{e9}llo"])
+        await #expect(throws: UpstreamError.lineTooLong) { _ = try await lines([String(repeating: "z", count: 100)], maxLine: 10) }
+    }
+
     @Test func inBandErrorFrame() async throws {
         let frame = #"{"error":{"message":"This model's maximum context length is 1000 tokens. However, you requested 1500 tokens (1400 in the messages, 100 in the completion).","code":400}}"#
         try await CoreHarness.run(backend: { _, n in
@@ -333,7 +357,7 @@ private let okCompletion: @Sendable (StubBackend.Seen, Int) -> StubBackend.Reply
         }, backend: { seen, _ in
             if seen.path.hasSuffix("/messages/count_tokens") { return .json(404, #"{"error":"nope"}"#) }
             if seen.json?["stream"] == true {
-                return .rawStream("event: message_start\ndata: {\"type\":\"message_start\"}\n\nevent: message_stop\ndata: {\"type\":\"message_stop\"}\n\n")
+                return .rawStream("event: message_start\ndata: {\"type\":\"message_start\"}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"delta\":{\"text\":\"h\u{e9}llo \u{1F600}\"}}\n\nevent: message_stop\ndata: {\"type\":\"message_stop\"}\n\n")
             }
             if seen.json?["max_tokens"] == 1 {
                 return .json(429, #"{"type":"error","error":{"type":"rate_limit_error","message":"slow down"}}"#, headers: ["Retry-After": "30"])
@@ -350,7 +374,8 @@ private let okCompletion: @Sendable (StubBackend.Seen, Int) -> StubBackend.Reply
             #expect(String(decoding: seen.body, as: UTF8.self).contains(#""properties":{"b":{},"a":{}}"#))
 
             let s = try await h.messages(#"{"model":"Claude","max_tokens":10,"stream":true,"messages":[]}"#)
-            #expect(s.events.names == ["message_start", "message_stop"])
+            #expect(s.events.names == ["message_start", "content_block_delta", "message_stop"])
+            #expect(s.events[1].data?["delta"]?["text"]?.string == "h\u{e9}llo \u{1F600}")
 
             let e = try await h.messages(#"{"model":"Claude","max_tokens":1,"messages":[]}"#)
             #expect(e.status == 429 && e.json?["error"]?["type"]?.string == "rate_limit_error" && e.headers["retry-after"] == "30")

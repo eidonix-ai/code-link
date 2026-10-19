@@ -31,3 +31,17 @@ public struct NoHooksFactory: EngineHooksFactory {
         EngineHooks()
     }
 }
+
+/// The hooks `Engine` uses unless given a factory. On the `core` branch it
+/// has none; once the `features` branch is merged it builds the feature
+/// modules:
+///
+///     let f = FeatureHooks(config: config, secrets: secrets, caller: caller, log: log)
+///     return EngineHooks(documentReader: f.documents, imageDescriber: f.images,
+///                        webSearcher: f.webSearch, autoMode: f.autoMode)
+public struct DefaultHooksFactory: EngineHooksFactory {
+    public init() {}
+    public func makeHooks(config: EngineConfig, caller: any ModelCaller, secrets: any SecretStore, log: any EventLog) -> EngineHooks {
+        EngineHooks()
+    }
+}

@@ -64,21 +64,21 @@ final class UpstreamResponse: Sendable {
 
     /// The body split into lines (without the line break), each at most
     /// `maxLine` bytes.
-    func lines(maxLine: Int = 16 << 20) -> LineReader { LineReader(owner: self, maxLine: maxLine) }
+    func lines(maxLine: Int = 16 << 20) -> LineReader { LineReader(body, keepAlive: self, maxLine: maxLine) }
 }
 
 /// Splits a byte stream into lines (`\n`, with a trailing `\r` removed).
 struct LineReader {
     /// Keeps the exchange alive while it is read.
-    let owner: UpstreamResponse
+    let keepAlive: AnyObject?
     var body: AsyncThrowingStream<Data, any Error>.AsyncIterator
     let maxLine: Int
     private var buffer: [UInt8] = []
     private var start = 0
     private var ended = false
 
-    init(owner: UpstreamResponse, maxLine: Int) {
-        self.owner = owner; self.body = owner.body.makeAsyncIterator(); self.maxLine = maxLine
+    init(_ stream: AsyncThrowingStream<Data, any Error>, keepAlive: AnyObject? = nil, maxLine: Int = 16 << 20) {
+        self.keepAlive = keepAlive; self.body = stream.makeAsyncIterator(); self.maxLine = maxLine
     }
 
     mutating func next() async throws -> String? {

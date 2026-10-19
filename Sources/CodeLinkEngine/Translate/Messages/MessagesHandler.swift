@@ -133,7 +133,7 @@ enum MessagesHandler {
                 } else if !t.done {
                     t.fail(.truncated)
                 }
-                call.log(200)
+                call.log(t.failure?.status ?? 200)
             }
         }
     }
@@ -193,7 +193,7 @@ enum MessagesHandler {
         if resp.isEventStream {
             return streamingResponse(status: HTTPResponse.Status(code: resp.status), headers: headers, channel: request.channel,
                                      pingInterval: nil) { sink in
-                do { for try await chunk in resp.body { sink.raw(String(decoding: chunk, as: UTF8.self)) } } catch {}
+                do { for try await chunk in resp.body { sink.raw(bytes: chunk) } } catch {}
             }
         }
         guard let data = try? await resp.collect() else { return .anthropicError(.api(502, "failed to read the backend's response")) }

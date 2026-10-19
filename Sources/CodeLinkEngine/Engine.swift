@@ -58,9 +58,9 @@ public final class Engine: Sendable {
     private let queue = Mutex<Task<Void, Never>?>(nil)
 
     /// `hooksFactory` builds the feature modules for each configuration; the
-    /// default has none (documents and searches answer with notes).
+    /// default is `DefaultHooksFactory` (the feature modules, once merged).
     public convenience init(config: EngineConfig, secrets: SecretStore, log: EventLog, accessToken: String,
-                            hooksFactory: any EngineHooksFactory = NoHooksFactory()) {
+                            hooksFactory: any EngineHooksFactory = DefaultHooksFactory()) {
         self.init(config: config, secrets: secrets, log: log, accessToken: accessToken, hooksFactory: hooksFactory,
                   tuning: EngineTuning(), responses: NotImplementedResponses())
     }

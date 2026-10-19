@@ -89,6 +89,8 @@ final class StreamTranslator {
     private(set) var searches = 0
     /// Whether anything but message_start and pings went out.
     private(set) var producedOutput = false
+    /// The error the stream ended with, if it did.
+    private(set) var failure: AnthropicError?
 
     init(sink: SSESink, model: String, stopSequences: [String], searchMode: Bool) {
         self.sink = sink; self.model = model; self.stopSequences = stopSequences; self.searchMode = searchMode
@@ -259,6 +261,7 @@ final class StreamTranslator {
         closeThinking()
         closeText()
         done = true
+        failure = e
         sink.raw("event: error\ndata: \(e.json.text)\n\n")
     }
 
