@@ -135,3 +135,31 @@ private func ctx(_ c: EngineConfig, mode: String = "auto") -> LaunchContext {
     #expect((attrs[.posixPermissions] as? Int) == 0o700)
     #expect(try String(contentsOfFile: path, encoding: .utf8).hasPrefix("#!/bin/zsh -li\n"))
 }
+
+@Test func terminalPlansPickTheScriptAndPathHandling() {
+    let plain = "/Users/d/Library/Caches/CodeLink/launch/launch-ab.sh"
+    let auto = Launcher.plans(.automatic, itermInstalled: true, scriptPath: plain)
+    #expect(auto.map(\.app) == [.iTerm, .terminal])                // iTerm first, Terminal as the fallback
+    #expect(auto[0].argument == plain)                             // iTerm: the bare path is the session command
+    #expect(auto[1].argument == "'\(plain)'")                      // Terminal: shell-quoted
+    #expect(auto[0].appleScript.contains("tell application \"iTerm2\""))
+    #expect(auto[1].appleScript.contains("tell application \"Terminal\"") && auto[1].appleScript.contains("do script"))
+
+    #expect(Launcher.plans(.terminal, itermInstalled: true, scriptPath: plain).map(\.app) == [.terminal])
+    #expect(Launcher.plans(.automatic, itermInstalled: false, scriptPath: plain).map(\.app) == [.terminal])
+    #expect(Launcher.plans(.iTerm, itermInstalled: false, scriptPath: plain).map(\.app) == [.terminal])
+
+    let spaced = "/Users/d/My Mac/launch.sh"
+    let fallback = Launcher.plans(.iTerm, itermInstalled: true, scriptPath: spaced)
+    #expect(fallback.map(\.app) == [.terminal] && fallback[0].argument == "'\(spaced)'")
+    let quoted = Launcher.plans(.automatic, itermInstalled: true, scriptPath: "/Users/o'brien/l.sh")
+    #expect(quoted.map(\.app) == [.terminal] && quoted[0].argument == #"'/Users/o'"'"'brien/l.sh'"#)
+}
+
+@Test func itermOpensATabInTheCurrentWindowElseANewWindow() {
+    let s = Launcher.iTermScript
+    #expect(s.contains("if (count of windows) = 0 then"))
+    #expect(s.contains("create window with default profile command (item 1 of argv)"))
+    #expect(s.contains("tell current window to create tab with default profile command (item 1 of argv)"))
+    #expect(Launcher.terminalScript.contains("do script (item 1 of argv)"))
+}

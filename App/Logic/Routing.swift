@@ -18,6 +18,17 @@ struct ModelChoice: Hashable, Sendable {
 enum RoleSlot: CaseIterable, Sendable {
     case main, opus, small, decision, vision, codex
 
+    var label: String {
+        switch self {
+        case .main: "Sonnet"
+        case .opus: "Opus"
+        case .small: "Small (Haiku)"
+        case .decision: "Decision"
+        case .vision: "Vision"
+        case .codex: "Codex"
+        }
+    }
+
     var keyPath: WritableKeyPath<Roles, String?> {
         switch self {
         case .opus: \.opus
@@ -77,18 +88,42 @@ extension EngineConfig {
     mutating func setRole(_ slot: RoleSlot, to choice: ModelChoice?, probed: ProbedModel? = nil) {
         guard let choice, !choice.upstream.isEmpty, !choice.backendID.isEmpty else {
             roles[keyPath: slot.keyPath] = nil
-            pruneModels()
             return
         }
-        let id = ensureModel(choice, probed: probed)
-        roles[keyPath: slot.keyPath] = id
-        pruneModels()
+        // Picking a model for a role enables it.
+        roles[keyPath: slot.keyPath] = ensureModel(choice, probed: probed)
     }
 
-    /// Drops models no role refers to, so config.json stays what the page shows.
-    mutating func pruneModels() {
-        let used = Set([roles.main, roles.opus, roles.small, roles.decision, roles.vision, roles.codex].compactMap { $0 })
-        models.removeAll { !used.contains($0.id) }
+    func isEnabled(_ choice: ModelChoice) -> Bool {
+        models.contains { $0.backendID == choice.backendID && $0.upstreamModel == choice.upstream }
+    }
+
+    /// Turns a provider's model on (creating its entry) or off. Turning one off
+    /// clears every role that used it and returns those roles, so the caller can say so.
+    @discardableResult
+    mutating func setEnabled(_ choice: ModelChoice, _ on: Bool, probed: ProbedModel? = nil) -> [RoleSlot] {
+        if on { ensureModel(choice, probed: probed); return [] }
+        guard let m = models.first(where: { $0.backendID == choice.backendID && $0.upstreamModel == choice.upstream }) else { return [] }
+        let cleared = RoleSlot.allCases.filter { modelID(for: $0) == m.id }
+        for slot in cleared { roles[keyPath: slot.keyPath] = nil }
+        models.removeAll { $0.id == m.id }
+        return cleared
+    }
+
+    /// Changes the name sessions see for a model (an alias). Refuses an empty or taken name.
+    @discardableResult
+    mutating func renameModel(from old: String, to new: String) -> Bool {
+        let n = new.trimmingCharacters(in: .whitespaces)
+        guard !n.isEmpty, n != old, !models.contains(where: { $0.id == n }), let i = models.firstIndex(where: { $0.id == old }) else { return false }
+        models[i].id = n
+        for slot in RoleSlot.allCases where modelID(for: slot) == old { roles[keyPath: slot.keyPath] = n }
+        return true
+    }
+
+    /// Drops models whose provider is gone.
+    mutating func dropOrphanModels() {
+        let ids = Set(backends.map(\.id))
+        models.removeAll { !ids.contains($0.backendID) }
     }
 
     /// Renames a provider and follows it in the models.
@@ -98,12 +133,16 @@ extension EngineConfig {
         for j in models.indices where models[j].backendID == old { models[j].backendID = new }
     }
 
-    mutating func removeBackend(_ id: String) {
+    /// Removes a provider with its models; returns the roles that lost their model.
+    @discardableResult
+    mutating func removeBackend(_ id: String) -> [RoleSlot] {
         backends.removeAll { $0.id == id }
+        var cleared: [RoleSlot] = []
         for slot in RoleSlot.allCases {
-            if let m = model(modelID(for: slot)), m.backendID == id { roles[keyPath: slot.keyPath] = nil }
+            if let m = model(modelID(for: slot)), m.backendID == id { roles[keyPath: slot.keyPath] = nil; cleared.append(slot) }
         }
         models.removeAll { $0.backendID == id }
+        return cleared
     }
 
     /// True when the engine has what it needs to start.
@@ -128,5 +167,61 @@ extension EngineConfig {
         if !roles.main.isEmpty, model(roles.main) == nil { out.append("The Sonnet model is not available on any provider.") }
         if let o = roles.opus, model(o) == nil { out.append("The Opus model is not available on any provider.") }
         return out
+    }
+}
+
+/// One model in a picker or checklist.
+struct ChoiceItem: Hashable, Sendable, Identifiable {
+    var choice: ModelChoice
+    /// The enabled model's id (its alias); nil when the model isn't enabled.
+    var modelID: String?
+    var contextWindow: Int?
+    var logprobs: Bool?
+    var vision: Bool?
+    var id: String { choice.tag }
+    var enabled: Bool { modelID != nil }
+    var title: String { modelID ?? choice.upstream }
+}
+
+/// A provider's models, for a grouped picker ("cn3-flare › GLM-5.3").
+struct ChoiceGroup: Hashable, Sendable, Identifiable {
+    var backendID: String
+    var items: [ChoiceItem]
+    var id: String { backendID }
+}
+
+enum RoutingChoices {
+    /// Providers in order, each with its enabled models first and (unless
+    /// `enabledOnly`) the models its last probe found that aren't enabled.
+    static func groups(config: EngineConfig, probes: [String: BackendProbe] = [:], enabledOnly: Bool = false) -> [ChoiceGroup] {
+        config.backends.compactMap { b in
+            var items = config.models.filter { $0.backendID == b.id }.map {
+                ChoiceItem(choice: ModelChoice(backendID: b.id, upstream: $0.upstreamModel), modelID: $0.id,
+                           contextWindow: $0.contextWindow, logprobs: $0.logprobs, vision: $0.vision)
+            }
+            if !enabledOnly {
+                for p in probes[b.id]?.models ?? [] where !items.contains(where: { $0.choice.upstream == p.upstreamModel }) {
+                    items.append(ChoiceItem(choice: ModelChoice(backendID: b.id, upstream: p.upstreamModel), modelID: nil,
+                                            contextWindow: p.contextWindow, logprobs: p.logprobs, vision: nil))
+                }
+            }
+            return items.isEmpty ? nil : ChoiceGroup(backendID: b.id, items: items)
+        }
+    }
+
+    /// "1M" / "262k" / "8192" for a context window.
+    static func shortContext(_ n: Int) -> String {
+        if n >= 1_000_000 { return "\(Int((Double(n) / 1_000_000).rounded()))M" }
+        if n >= 1000 { return "\(n / 1000)k" }
+        return String(n)
+    }
+
+    /// "262k · logprobs · vision" facts line.
+    static func facts(_ item: ChoiceItem) -> String {
+        var parts: [String] = []
+        if let c = item.contextWindow { parts.append(shortContext(c)) }
+        if item.logprobs == true { parts.append("logprobs") }
+        if item.vision == true { parts.append("vision") }
+        return parts.joined(separator: " · ")
     }
 }

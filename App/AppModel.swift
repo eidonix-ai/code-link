@@ -53,6 +53,8 @@ final class AppModel {
     private(set) var probing: Set<String> = []
 
     var saveMessage: SaveMessage?
+    /// Roles that lost their model since the last save (a model was turned off or a provider removed).
+    private(set) var warnings: [String] = []
     private var removedKeyRefs: Set<String> = []
     private var bootstrapped = false
     private let firstRun: Bool
@@ -141,7 +143,7 @@ final class AppModel {
     func save() async {
         let problems = draft.problems()
         guard problems.isEmpty else { saveMessage = .failed(problems); return }
-        draft.pruneModels()
+        draft.dropOrphanModels()
         let portChanged = draft.port != config.port
         do {
             try configStore.save(draft)
@@ -160,9 +162,11 @@ final class AppModel {
             await stop()
         }
         saveMessage = .saved
+        warnings = []
     }
 
     func revert() {
+        warnings = []
         draft = config
         secrets.discardPending()
         removedKeyRefs = []
@@ -179,7 +183,8 @@ final class AppModel {
 
     func removeProvider(_ id: String) {
         if let ref = draft.backends.first(where: { $0.id == id })?.apiKeyRef { removedKeyRefs.insert(ref); secrets.setPending("", ref: ref) }
-        draft.removeBackend(id)
+        let cleared = draft.removeBackend(id)
+        note(cleared, reason: "provider \(id) was removed")
         probes[id] = nil
     }
 
@@ -221,27 +226,39 @@ final class AppModel {
         probes[choice.backendID]?.models.first { $0.upstreamModel == choice.upstream }
     }
 
-    /// Every model a picker can offer: probed ones, plus those already configured.
-    func choices(for backendID: String? = nil) -> [ModelChoice] {
-        var out: [ModelChoice] = []
-        func add(_ c: ModelChoice) { if !out.contains(c), backendID == nil || c.backendID == backendID { out.append(c) } }
-        for b in draft.backends { for m in probes[b.id]?.models ?? [] { add(ModelChoice(backendID: b.id, upstream: m.upstreamModel)) } }
-        for m in draft.models { add(ModelChoice(backendID: m.backendID, upstream: m.upstreamModel)) }
-        return out
+    /// Providers with their models for the grouped pickers and checklists.
+    func groups(enabledOnly: Bool = false) -> [ChoiceGroup] {
+        RoutingChoices.groups(config: draft, probes: probes, enabledOnly: enabledOnly)
     }
 
     func setRole(_ slot: RoleSlot, to choice: ModelChoice?) {
         draft.setRole(slot, to: choice, probed: choice.flatMap(probedModel))
     }
 
+    /// The "use" toggle in a provider's model list. Turning a model off clears
+    /// the roles that used it, with a warning.
+    func setModelEnabled(_ choice: ModelChoice, _ on: Bool) {
+        let before = draft.models.first { $0.backendID == choice.backendID && $0.upstreamModel == choice.upstream }
+        let cleared = draft.setEnabled(choice, on, probed: probedModel(choice))
+        if let before { note(cleared, reason: "\(before.id) was turned off") }
+    }
+
+    private func note(_ cleared: [RoleSlot], reason: String) {
+        guard !cleared.isEmpty else { return }
+        let names = cleared.map(\.label).joined(separator: ", ")
+        warnings.append("\(names) \(cleared.count == 1 ? "has" : "have") no model now: \(reason). Pick another.")
+    }
+
     // MARK: Menu actions
 
-    /// Quick switch of the Sonnet (main) model among the configured ones.
-    func switchMain(to id: String) async {
-        guard config.model(id) != nil, config.roles.main != id else { return }
+    /// Quick re-routing from the menu: points Sonnet or Opus at an enabled model
+    /// (nil sends Opus back to "same as Sonnet") and applies it. New sessions
+    /// use it; running ones keep the model they started with.
+    func switchRole(_ slot: RoleSlot, to modelID: String?) async {
+        guard config.roles[keyPath: slot.keyPath] != modelID, slot == .opus || modelID != nil else { return }
+        if let modelID, config.model(modelID) == nil { return }
         draft = config
-        draft.roles.main = id
-        draft.pruneModels()
+        draft.roles[keyPath: slot.keyPath] = modelID
         await save()
     }
 
