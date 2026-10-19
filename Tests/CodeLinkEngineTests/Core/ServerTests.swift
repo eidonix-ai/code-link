@@ -41,14 +41,6 @@ private let okCompletion: @Sendable (StubBackend.Seen, Int) -> StubBackend.Reply
         }
     }
 
-    @Test func responsesIsNotImplementedYet() async throws {
-        try await CoreHarness.run(backend: okCompletion) { h in
-            let r = try await h.request("POST", "/v1/responses", body: #"{"model":"GLM","input":"hi"}"#)
-            #expect(r.status == 501)
-            #expect(h.backend.chatRequests.isEmpty)
-        }
-    }
-
     // MARK: non-streaming
 
     @Test func nonStreamingTranslatesBothWays() async throws {

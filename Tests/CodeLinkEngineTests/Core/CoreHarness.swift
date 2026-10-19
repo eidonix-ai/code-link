@@ -297,7 +297,7 @@ struct CoreHarness {
         configure(&config)
         let log = CoreEventLog()
         let engine = Engine(config: config, secrets: CoreSecrets(), log: log, accessToken: token,
-                            hooksFactory: factory ?? CoreHooksFactory(hooks), tuning: tuning, responses: NotImplementedResponses())
+                            hooksFactory: factory ?? CoreHooksFactory(hooks), tuning: tuning, responses: CodexResponses())
         try await engine.start()
         guard case .running(let port) = await engine.state else {
             Issue.record("engine not running")
