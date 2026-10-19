@@ -94,12 +94,13 @@ private struct Footer: View {
 private struct ProvidersSection: View {
     @Bindable var model: AppModel
     var body: some View {
-        SettingsSection("Providers", subtitle: "where the models run") {
+        SettingsSection("Providers", subtitle: "1 add a provider · 2 test it and tick the models to use · 3 route them below") {
             ForEach($model.draft.backends) { $backend in
                 ProviderRow(model: model, backend: $backend)
             }
             HStack {
                 Button { model.addProvider() } label: { Label("Add provider", systemImage: "plus") }
+                    .task(id: model.draft.backends.map(\.id)) { for b in model.draft.backends { await model.probeIfNeeded(b.id) } }
                 if model.draft.backends.isEmpty {
                     Text("Add the server your models run on (vLLM, SGLang, Flare, or an Anthropic endpoint).")
                         .font(.system(size: 11)).foregroundStyle(.secondary)
@@ -150,6 +151,7 @@ private struct ProviderRow: View {
                 ProbeSummary(probe: model.probes[backend.id])
                 Spacer()
             }
+            ProviderModels(model: model, backendID: backend.id)
         }
         .onAppear { name = backend.id; url = backend.baseURL.absoluteString }
         .onChange(of: backend.id) { name = backend.id }
@@ -166,6 +168,80 @@ private struct ProviderRow: View {
         let t = s.trimmingCharacters(in: .whitespaces)
         guard let u = URL(string: t), let scheme = u.scheme, ["http", "https"].contains(scheme), u.host != nil else { return nil }
         return u
+    }
+}
+
+/// The checklist of a provider's models: tick the ones to use.
+private struct ProviderModels: View {
+    var model: AppModel
+    var backendID: String
+
+    var body: some View {
+        let items = model.groups().first { $0.backendID == backendID }?.items ?? []
+        if items.isEmpty {
+            if model.probes[backendID] != nil { Text("No models found. Test again, or add the model name under Routing.").font(.system(size: 11)).foregroundStyle(.secondary) }
+        } else {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("MODELS · \(items.filter(\.enabled).count) of \(items.count) in use")
+                    .font(.system(size: 10, weight: .semibold)).tracking(0.6).foregroundStyle(.secondary)
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 5) {
+                        ForEach(items) { ModelToggleRow(model: model, item: $0) }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .frame(maxHeight: min(CGFloat(items.reduce(0) { $0 + ($1.enabled ? 52 : 22) }), 190))
+            }
+            .padding(.top, 2)
+        }
+    }
+}
+
+private struct ModelToggleRow: View {
+    var model: AppModel
+    var item: ChoiceItem
+    @State private var alias = ""
+    @FocusState private var aliasFocused: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            HStack(spacing: 8) {
+                Toggle(isOn: Binding(get: { item.enabled }, set: { model.setModelEnabled(item.choice, $0) })) {
+                    Text(item.choice.upstream).font(.system(size: 12, design: .monospaced)).lineLimit(1).truncationMode(.middle)
+                }
+                .toggleStyle(.checkbox)
+                Spacer()
+                Text(RoutingChoices.facts(item)).font(.system(size: 11)).foregroundStyle(.secondary)
+            }
+            if item.enabled {
+                HStack(spacing: 6) {
+                    Text("name").font(.system(size: 11)).foregroundStyle(.secondary)
+                    TextField("name sessions see", text: $alias).focused($aliasFocused).font(.system(size: 12))
+                        .onSubmit(commitAlias).frame(maxWidth: 200)
+                        .onChange(of: aliasFocused) { if !aliasFocused { commitAlias() } }
+                    Text("context").font(.system(size: 11)).foregroundStyle(.secondary)
+                    TextField("auto", value: contextBinding, format: .number.grouping(.never))
+                        .font(.system(size: 12)).multilineTextAlignment(.trailing).frame(width: 90)
+                }
+                .padding(.leading, 22)
+            }
+        }
+        .onAppear { alias = item.modelID ?? "" }
+        .onChange(of: item.modelID) { alias = item.modelID ?? "" }
+    }
+
+    private func commitAlias() {
+        guard let old = item.modelID else { return }
+        if !model.draft.renameModel(from: old, to: alias) { alias = old }
+    }
+
+    private var contextBinding: Binding<Int?> {
+        Binding(get: { item.modelID.flatMap { model.draft.model($0)?.contextWindow } },
+                set: { v in
+                    if let id = item.modelID, let i = model.draft.models.firstIndex(where: { $0.id == id }) {
+                        model.draft.models[i].contextWindow = (v ?? 0) > 0 ? v : nil
+                    }
+                })
     }
 }
 
@@ -190,7 +266,7 @@ struct ProbeSummary: View {
     }
 }
 
-// MARK: Models
+// MARK: Routing
 
 private struct ModelsSection: View {
     @Bindable var model: AppModel
@@ -198,9 +274,12 @@ private struct ModelsSection: View {
     init(model: AppModel, expanded: Bool = false) { self.model = model; _advanced = State(initialValue: expanded) }
 
     var body: some View {
-        SettingsSection("Models", subtitle: "Claude Code's Opus and Sonnet slots") {
-            TierEditor(model: model, slot: .main, title: "Sonnet", hint: "Claude Code's default model, background tasks and Codex unless overridden.")
-            TierEditor(model: model, slot: .opus, title: "Opus", hint: "Used when Claude Code asks for Opus (plan mode, /model).")
+        SettingsSection("Routing", subtitle: "which model answers each Claude Code slot") {
+            ForEach(model.warnings, id: \.self) { StatusLabel(level: .warn, text: $0) }
+            TierEditor(model: model, slot: .main, title: "Sonnet", hint: "Claude Code's default model; also background tasks and Codex unless overridden.")
+            TierEditor(model: model, slot: .opus, title: "Opus", hint: "Used when Claude Code asks for Opus (plan mode, /model). May be on another provider.")
+            Text("New sessions use the routing you save; sessions already running keep the model they started with.")
+                .font(.system(size: 11)).foregroundStyle(.secondary)
             DisclosureGroup("Advanced", isExpanded: $advanced) {
                 VStack(alignment: .leading, spacing: 8) {
                     RolePicker(model: model, slot: .small, label: "Small (Haiku)", none: "Same as Sonnet",
@@ -217,18 +296,41 @@ private struct ModelsSection: View {
     }
 }
 
+/// One picker over every model, grouped by provider ("cn3 › GLM-5.3").
+/// Picking a model that isn't enabled yet enables it.
+private struct ModelPicker: View {
+    var model: AppModel
+    var slot: RoleSlot
+    /// The label for "no model" (nil = the slot needs one; shown as "Choose…" until set).
+    var none: String?
+
+    var body: some View {
+        let current = model.draft.choice(for: slot)?.tag ?? ""
+        Picker(slot.label, selection: Binding(get: { current }, set: { model.setRole(slot, to: ModelChoice(tag: $0)) })) {
+            if none != nil || current.isEmpty { Text(none ?? "Choose…").tag("") }
+            ForEach(model.groups()) { g in
+                Section(g.backendID) {
+                    ForEach(g.items) { Text(Self.label(g.backendID, $0)).tag($0.choice.tag) }
+                }
+            }
+        }
+        .labelsHidden()
+    }
+
+    static func label(_ backend: String, _ item: ChoiceItem) -> String {
+        var s = "\(backend) › \(item.title)"
+        let facts = RoutingChoices.facts(item)
+        if !facts.isEmpty { s += "  ·  " + facts }
+        if !item.enabled { s += "  (turn on)" }
+        return s
+    }
+}
+
 private struct TierEditor: View {
     @Bindable var model: AppModel
     var slot: RoleSlot
     var title: String
     var hint: String
-    @State private var chosenProvider: String?
-
-    private var choice: ModelChoice? { model.draft.choice(for: slot) }
-    private var providerID: String {
-        choice?.backendID ?? chosenProvider ?? (slot == .main ? model.draft.backends.first?.id : nil) ?? ""
-    }
-    private var probedModels: [ProbedModel] { model.probes[providerID]?.models ?? [] }
 
     var body: some View {
         Well {
@@ -236,58 +338,23 @@ private struct TierEditor: View {
                 Text(title).font(.system(size: 13, weight: .semibold))
                 Text(hint).font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(2)
             }
-            FieldRow("Provider") {
-                Picker("Provider", selection: Binding(get: { providerID }, set: setProvider)) {
-                    if slot != .main { Text("Same as Sonnet").tag("") }
-                    else if providerID.isEmpty { Text("Choose…").tag("") }
-                    ForEach(model.draft.backends) { Text($0.id).tag($0.id) }
+            FieldRow("Model") {
+                if model.draft.backends.isEmpty {
+                    Text("Add a provider first.").font(.system(size: 12)).foregroundStyle(.secondary)
+                } else {
+                    ModelPicker(model: model, slot: slot, none: slot == .main ? nil : "Same as Sonnet")
                 }
-                .labelsHidden()
             }
-            if !providerID.isEmpty {
-                FieldRow("Model") {
-                    if probedModels.isEmpty {
-                        TextField("Model name on this provider", text: Binding(
-                            get: { choice?.upstream ?? "" },
-                            set: { model.setRole(slot, to: $0.isEmpty ? nil : ModelChoice(backendID: providerID, upstream: $0)) }))
-                    } else {
-                        Picker("Model", selection: Binding(get: { choice?.upstream ?? "" },
-                                                           set: { model.setRole(slot, to: $0.isEmpty ? nil : ModelChoice(backendID: providerID, upstream: $0)) })) {
-                            if choice == nil { Text("Choose…").tag("") }
-                            if let c = choice, !probedModels.contains(where: { $0.upstreamModel == c.upstream }) { Text(c.upstream).tag(c.upstream) }
-                            ForEach(probedModels, id: \.upstreamModel) { Text(label($0)).tag($0.upstreamModel) }
-                        }
-                        .labelsHidden()
-                    }
-                    Button { Task { await model.probe(providerID) } } label: { Image(systemName: "arrow.clockwise") }
-                        .buttonStyle(.borderless).help("Refresh the model list from the provider")
-                        .disabled(model.probing.contains(providerID))
-                }
-                if let m = model.draft.model(model.draft.modelID(for: slot)) {
-                    FieldRow("Context") {
-                        TextField("auto", value: contextBinding(m.id), format: .number.grouping(.never))
-                            .frame(width: 110).multilineTextAlignment(.trailing)
-                        Text("tokens").font(.system(size: 11)).foregroundStyle(.secondary)
-                        Spacer()
-                        ModelFacts(model: model, choice: ModelChoice(backendID: m.backendID, upstream: m.upstreamModel), configured: m)
-                    }
+            if let m = model.draft.model(model.draft.modelID(for: slot)) {
+                FieldRow("Context") {
+                    TextField("auto", value: contextBinding(m.id), format: .number.grouping(.never))
+                        .frame(width: 110).multilineTextAlignment(.trailing)
+                    Text("tokens").font(.system(size: 11)).foregroundStyle(.secondary)
+                    Spacer()
+                    ModelFacts(model: model, choice: ModelChoice(backendID: m.backendID, upstream: m.upstreamModel), configured: m)
                 }
             }
         }
-        .task(id: providerID) { if !providerID.isEmpty { await model.probeIfNeeded(providerID) } }
-    }
-
-    private func label(_ m: ProbedModel) -> String {
-        var s = m.upstreamModel
-        if let c = m.contextWindow { s += "  ·  \(c / 1000)k" }
-        if m.logprobs == true { s += "  ·  logprobs" }
-        return s
-    }
-
-    private func setProvider(_ id: String) {
-        guard id != providerID else { return }
-        chosenProvider = id.isEmpty ? nil : id
-        model.setRole(slot, to: nil)
     }
 
     private func contextBinding(_ id: String) -> Binding<Int?> {
@@ -318,16 +385,8 @@ private struct RolePicker: View {
     var hint: String
 
     var body: some View {
-        FieldRow(label) {
-            Picker(label, selection: Binding(
-                get: { model.draft.choice(for: slot)?.tag ?? "" },
-                set: { model.setRole(slot, to: ModelChoice(tag: $0)) })) {
-                Text(none).tag("")
-                ForEach(model.choices(), id: \.self) { c in Text("\(c.upstream)  ·  \(c.backendID)").tag(c.tag) }
-            }
-            .labelsHidden()
-        }
-        .help(hint)
+        FieldRow(label) { ModelPicker(model: model, slot: slot, none: none) }
+            .help(hint)
         Text(hint).font(.system(size: 11)).foregroundStyle(.secondary).padding(.leading, 104)
     }
 }
