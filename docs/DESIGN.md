@@ -291,20 +291,28 @@ Rules from go-llm-proxy `internal/handler/responses*.go` (Codex 0.163):
 - `~/Library/Application Support/CodeLink/config.json` (EngineConfig, no
   secrets), `claude-settings.json`; secrets in the Keychain (service
   `code-link`); last launch folders; launch at login via `SMAppService`.
-- Settings window panes:
-  - **Backends:** add/edit/remove (kind, URL, key), Test button (probe:
-    reachable, model list, logprobs, latency).
-  - **Models & roles:** models per backend (picked from the probe's list,
-    context window auto-filled), role pickers with hints (decision needs
-    logprobs; vision role optional).
-  - **Documents:** PaddleOCR endpoint (Test button) and the local
-    fallback (Apple Vision / text only / off).
-  - **Web search:** provider (Tavily / Brave / off) and its key (Keychain),
-    Test button.
-  - **Launch:** terminal (iTerm/Terminal), default folder, Claude Code
-    permission mode (auto default), extra env.
-  - **Activity:** recent requests (route, model, status, latency) and
-    auto-mode decisions (stage, p_block, N) — no prompt text.
+- **One configuration page** (Derek, 2026-10-19: small app — menu bar plus
+  a single compact settings page, simple but powerful), in order:
+  - **Providers:** name, kind (OpenAI-compatible = vLLM/SGLang/Flare, or
+    Anthropic), base URL, API key (Keychain), Test (probe: reachable, model
+    list, logprobs, latency).
+  - **Models — two tiers:** Opus tier and Sonnet tier, each a provider +
+    a model on it (the same provider or different ones); context window
+    filled from the probe. Sonnet = `roles.main` (default, also haiku/small
+    and Codex unless overridden); Opus = `roles.opus`. Advanced: small/haiku,
+    decision (needs logprobs), vision (only if the tier model lacks vision),
+    Codex overrides.
+  - **Auto mode:** decision model and its logprob status.
+  - **Documents:** PaddleOCR endpoint (Test) and the local fallback
+    (Apple Vision / text only / off).
+  - **Web search:** Tavily / Brave / off and its key (Keychain), Test.
+  - **Launch:** terminal (iTerm/Terminal), Claude Code permission mode
+    (auto default), launch at login.
+  - Recent activity (requests, decisions — no prompt text) tucked away at
+    the bottom.
+- **Style:** Eidonix teal `#00C2C7` as the accent (deeper `#009EA3` where
+  light-mode contrast needs it), system backgrounds and labels, correct in
+  light and dark mode; status glyphs green/amber/red only.
 - Menu bar icon reflects engine state (running / backend unreachable /
   stopped).
 
