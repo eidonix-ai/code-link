@@ -19,7 +19,7 @@ Menu bar app (CodeLink.app, SwiftUI, LSUIElement)
   ├─ Launcher: writes a login-shell script, opens it in iTerm or Terminal
   └─ CodeLinkEngine (Swift package, no UI)
        local HTTP server 127.0.0.1:<port>  ←  claude / codex sessions
-         /v1/messages (+count_tokens), /v1/models, /v1/responses, /healthz
+         /v1/messages (+count_tokens), /v1/responses, /v1/chat/completions, /v1/models, /healthz
        → Chat Completions on the configured backends (SSE)
 ```
 
@@ -285,6 +285,23 @@ Rules from go-llm-proxy `internal/handler/responses*.go` (Codex 0.163):
   `server_is_overloaded`. `previous_response_id` / `store: true` → 400.
 - Codex auto-review requests use model `codex-auto-review`: route to the
   decision model (generative; it wants a JSON outcome).
+
+## 5a. `/v1/chat/completions` — for every other client
+
+For tools that speak Chat Completions (opencode, qwen-code, aider, editor
+plugins, scripts) with the same access token:
+- Model name → configured model (or tier name: `opus`, `sonnet`, `haiku`,
+  and claude-* names as in §3), else main.
+- OpenAI-compatible backend: forward the request with the upstream model
+  name; stream passes through unchanged (flush per chunk, cancel upstream on
+  disconnect), errors pass through with their status.
+- Images on a model without vision → §4.4 (vision-role description, else the
+  "image omitted" note); `file` parts with PDFs → §4.4 documents.
+- Anthropic backend: translate Chat Completions → Messages and the response
+  (incl. streaming chunks, tool calls, usage) back — reference go-llm-proxy
+  `internal/handler/anthropic_oai_translate.go` / `anthropic_oai_streaming.go`.
+- `GET /v1/models` also answers in OpenAI list shape when the client asks
+  for it (no `anthropic-version` header).
 
 ## 6. Settings and state
 
