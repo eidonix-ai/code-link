@@ -20,6 +20,7 @@ let package = Package(
             .product(name: "ServiceLifecycle", package: "swift-service-lifecycle"),
             .product(name: "HTTPTypes", package: "swift-http-types"),
         ]),
+        .executableTarget(name: "code-link-serve", dependencies: ["CodeLinkEngine"]),
         .testTarget(name: "CodeLinkEngineTests", dependencies: [
             "CodeLinkEngine",
             .product(name: "Hummingbird", package: "hummingbird"),
