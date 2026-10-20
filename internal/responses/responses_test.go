@@ -1047,7 +1047,6 @@ func TestUnreachableBackendIs502AndSlowOneIs504(t *testing.T) {
 
 // Documents and images.
 
-
 func TestInputFilePDFsGoThroughTheDocumentReader(t *testing.T) {
 	reader := &testkit.DocReader{}
 	pdf := "JVBERi0xLjQK"
