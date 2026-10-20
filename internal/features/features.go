@@ -32,9 +32,13 @@ type deps struct {
 }
 
 func build(cfg *config.Config, caller hooks.ModelCaller, log hooks.EventLog, d deps) hooks.Hooks {
+	docs, docsKey := cfg.Documents, ""
+	if b, ok := cfg.DocumentsVia(); ok {
+		docs.PaddleOCR, docsKey = config.GatewayURL(b, config.GatewayDocumentsPath), b.APIKey
+	}
 	h := hooks.Hooks{
-		Documents: documents.New(cfg.Documents, d.client),
-		WebSearch: searcher(cfg.WebSearch, d),
+		Documents: documents.New(docs, docsKey, d.client),
+		WebSearch: searcher(cfg, d),
 	}
 	if m, ok := cfg.Model(cfg.Roles.Vision); ok {
 		h.Images = images.New(m, caller)
@@ -47,7 +51,15 @@ func build(cfg *config.Config, caller hooks.ModelCaller, log hooks.EventLog, d d
 	return h
 }
 
-func searcher(ws config.WebSearch, d deps) hooks.WebSearcher {
+func searcher(cfg *config.Config, d deps) hooks.WebSearcher {
+	ws := cfg.WebSearch
+	if b, ok := cfg.SearchVia(); ok {
+		// A go-llm-proxy gateway answers in Tavily's shape with its own keys.
+		if u := config.GatewayURL(b, config.GatewaySearchPath); u != "" && b.APIKey != "" {
+			return &websearch.Tavily{Key: b.APIKey, Client: d.client, Endpoint: u}
+		}
+		return websearch.Unavailable{}
+	}
 	key := strings.TrimSpace(ws.APIKey)
 	switch {
 	case key == "":

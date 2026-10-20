@@ -29,6 +29,55 @@ type Probe struct {
 	Error     string        `json:"error,omitempty"`
 	Models    []ProbedModel `json:"models"`
 	LatencyMS int           `json:"latencyMS,omitempty"`
+	// Gateway is what a go-llm-proxy offers besides chat; nil for other
+	// backends.
+	Gateway *Gateway `json:"gateway,omitempty"`
+}
+
+// Gateway is a go-llm-proxy's GET /v1/capabilities: services usable with
+// the same key.
+type Gateway struct {
+	WebSearch bool `json:"webSearch"`
+	Documents bool `json:"documents"`
+	// Defaults are the gateway's recommended models per role (upstream
+	// ids), set by its operator; empty = none.
+	Defaults GatewayDefaults `json:"defaults"`
+}
+
+// GatewayDefaults are recommended model ids for code-link's roles.
+type GatewayDefaults struct {
+	Main     string `json:"main,omitempty"`
+	Opus     string `json:"opus,omitempty"`
+	Small    string `json:"small,omitempty"`
+	Decision string `json:"decision,omitempty"`
+	Vision   string `json:"vision,omitempty"`
+	Codex    string `json:"codex,omitempty"`
+}
+
+// ProbeGateway asks a backend for its capabilities; nil when it isn't a
+// go-llm-proxy (or doesn't answer).
+func ProbeGateway(ctx context.Context, client *upstream.Client, b config.Backend, timeout time.Duration) *Gateway {
+	h := http.Header{"Accept": {"application/json"}}
+	if b.APIKey != "" {
+		h.Set("Authorization", "Bearer "+b.APIKey)
+	}
+	resp, err := client.Send(ctx, upstream.Request{URL: routing.Target{Backend: b}.URL("/capabilities"), Method: http.MethodGet, Header: h}, timeout)
+	if err != nil {
+		return nil
+	}
+	data, err := resp.Collect(64 << 10)
+	if err != nil || resp.Status != 200 {
+		return nil
+	}
+	j := jsonx.ParseObject(data)
+	if jsonx.Str(j["service"]) != "go-llm-proxy" {
+		return nil
+	}
+	g := &Gateway{WebSearch: jsonx.Str(j["web_search"]) != "", Documents: jsonx.Str(j["documents"]) != ""}
+	d := jsonx.Obj(j["defaults"])
+	g.Defaults = GatewayDefaults{Main: jsonx.Str(d["main"]), Opus: jsonx.Str(d["opus"]), Small: jsonx.Str(d["small"]),
+		Decision: jsonx.Str(d["decision"]), Vision: jsonx.Str(d["vision"]), Codex: jsonx.Str(d["codex"])}
+	return g
 }
 
 // ListModels is the ids and context windows a backend's /models lists.
@@ -144,7 +193,10 @@ func ProbeBackend(ctx context.Context, client *upstream.Client, b config.Backend
 	if p.Models == nil {
 		p.Models = []ProbedModel{}
 	}
-	if b.Kind != config.OpenAICompatible {
+	if b.Kind == config.GoLLMProxy || b.Kind == config.OpenAICompatible {
+		p.Gateway = ProbeGateway(ctx, client, b, 10*time.Second)
+	}
+	if !b.Kind.ChatCompletions() {
 		return p
 	}
 	sem := make(chan struct{}, 4)
@@ -198,7 +250,7 @@ func (f *Facts) ContextWindow(ctx context.Context, t routing.Target) int {
 	if t.Model.ContextWindow != nil {
 		return *t.Model.ContextWindow
 	}
-	if t.Backend.Kind != config.OpenAICompatible {
+	if !t.Backend.Kind.ChatCompletions() {
 		return 0
 	}
 	k := key(t)

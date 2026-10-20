@@ -37,9 +37,9 @@ func service(o svcOpts) *Service {
 		o.local = config.LocalOCR
 	}
 	cfg := config.Documents{Local: o.local}
-	s := New(cfg, nil)
+	s := New(cfg, "", nil)
 	if o.paddle != nil {
-		s.paddle = newPaddle(paddleURL, o.paddle.client())
+		s.paddle = newPaddle(paddleURL, "", o.paddle.client())
 	}
 	if o.ocr == nil {
 		o.ocr = &fakeOCR{err: errors.New("fake OCR failure")}
@@ -119,7 +119,7 @@ func TestScannedPDFWithoutPlatformOCRGetsTheNote(t *testing.T) {
 		t.Fatalf("%d OCR calls", ocr.calls.Load())
 	}
 	// the real platform default
-	if out := New(config.Documents{Local: config.LocalOCR}, nil).Read(ctx, input(scannedPDF(1), "")); !strings.Contains(out.Error, "no text layer") {
+	if out := New(config.Documents{Local: config.LocalOCR}, "", nil).Read(ctx, input(scannedPDF(1), "")); !strings.Contains(out.Error, "no text layer") {
 		t.Fatalf("%+v", out)
 	}
 }
@@ -141,7 +141,7 @@ func TestOCRReadsAnImageSentAsADocument(t *testing.T) {
 	if out.Text != "HELLO WORLD" || out.Via != "ocr" || out.Pages != 1 || out.OCRPages != 1 {
 		t.Fatalf("%+v", out)
 	}
-	none := New(config.Documents{Local: config.LocalOCR}, nil).Read(ctx, input([]byte{1}, "image/png"))
+	none := New(config.Documents{Local: config.LocalOCR}, "", nil).Read(ctx, input([]byte{1}, "image/png"))
 	if none.Text != "" || !strings.Contains(none.Error, "images need OCR") {
 		t.Fatalf("%+v", none)
 	}
@@ -357,7 +357,7 @@ func TestReachabilityProbeIsCachedForAMinute(t *testing.T) {
 
 func TestProbeTTLExpires(t *testing.T) {
 	st := stub(func(seenRequest) (int, string, error) { return 405, "", nil })
-	p := newPaddle(paddleURL, st.client())
+	p := newPaddle(paddleURL, "", st.client())
 	t0 := time.Now()
 	now := t0
 	p.now = func() time.Time { return now }
@@ -376,7 +376,7 @@ func TestProbeTTLExpires(t *testing.T) {
 
 func TestGatewayErrorOnProbeMeansUnreachable(t *testing.T) {
 	st := stub(func(seenRequest) (int, string, error) { return 502, "", nil })
-	if newPaddle(paddleURL, st.client()).reachable(ctx) {
+	if newPaddle(paddleURL, "", st.client()).reachable(ctx) {
 		t.Fatal("reachable")
 	}
 }
@@ -452,7 +452,7 @@ func TestTextIsCappedOnACharacterBoundary(t *testing.T) {
 }
 
 func TestDefaultCapIs600KB(t *testing.T) {
-	if DefaultTextCap != 600*1024 || New(config.Documents{}, nil).textCap != DefaultTextCap {
+	if DefaultTextCap != 600*1024 || New(config.Documents{}, "", nil).textCap != DefaultTextCap {
 		t.Fatal(DefaultTextCap)
 	}
 }

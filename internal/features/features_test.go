@@ -166,3 +166,51 @@ func TestDocumentsFollowTheSettings(t *testing.T) {
 		t.Fatalf("%+v", out)
 	}
 }
+
+func TestGatewayProviderServesSearchAndDocumentsWithItsKey(t *testing.T) {
+	var mu sync.Mutex
+	seen := map[string]string{}
+	gw := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		seen[r.Method+" "+r.URL.Path] = r.Header.Get("Authorization")
+		mu.Unlock()
+		switch r.URL.Path {
+		case "/v1/search":
+			io.WriteString(w, `{"results":[{"title":"Go","url":"https://go.dev","content":"The Go language"}]}`)
+		case "/layout-parsing":
+			if r.Method == http.MethodGet {
+				w.WriteHeader(405)
+				return
+			}
+			io.WriteString(w, `{"result":{"layoutParsingResults":[{"markdown":{"text":"PAGE ONE"}}]}}`)
+		}
+	}))
+	defer gw.Close()
+	c := cfg([]config.Model{glm}, config.Roles{Main: "GLM"})
+	c.Backends = []config.Backend{{ID: "gw", Kind: config.OpenAICompatible, BaseURL: gw.URL + "/v1", APIKey: "user-key"}}
+	c.WebSearch = config.WebSearch{Via: "gw", Provider: config.Brave, APIKey: "ignored"}
+	c.Documents = config.Documents{Via: "gw", PaddleOCR: "http://ignored.invalid/layout-parsing", Local: config.LocalOff}
+	h := build(c, nopCaller{}, nil, deps{client: gw.Client()})
+	hits, err := h.WebSearch.Search(context.Background(), "go", nil, nil)
+	if err != nil || len(hits) != 1 || hits[0].URL != "https://go.dev" || hits[0].Snippet != "The Go language" {
+		t.Fatalf("search: %v %+v", err, hits)
+	}
+	out := h.Documents.Read(context.Background(), hooks.DocumentInput{Data: []byte("%PDF-1.4"), MediaType: "application/pdf", Title: "a.pdf"})
+	if out.Via != "paddleocr" || out.Text == "" {
+		t.Fatalf("documents: %+v", out)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if seen["POST /v1/search"] != "Bearer user-key" || seen["POST /layout-parsing"] != "Bearer user-key" {
+		t.Fatalf("auth: %v", seen)
+	}
+}
+
+func TestGatewayWithoutAKeyIsUnavailable(t *testing.T) {
+	c := cfg([]config.Model{glm}, config.Roles{Main: "GLM"})
+	c.Backends = []config.Backend{{ID: "gw", BaseURL: "https://llm.example/v1"}}
+	c.WebSearch = config.WebSearch{Via: "gw"}
+	if _, err := Factory(c, nopCaller{}, nil).WebSearch.Search(context.Background(), "q", nil, nil); !errors.Is(err, hooks.ErrSearchUnavailable) {
+		t.Fatal(err)
+	}
+}

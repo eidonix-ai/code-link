@@ -19,6 +19,7 @@ import (
 // Request: {file: base64, fileType: 0 (PDF) | 1 (image), returnMarkdownImages: false, visualize: false}.
 // Response: {errorCode, errorMsg, result: {layoutParsingResults: [{markdown: {text}}]}}, one entry per page.
 type paddleClient struct {
+	key string // a gateway's key, sent as a bearer token
 	endpoint     string
 	client       *http.Client
 	probeTTL     time.Duration
@@ -58,11 +59,11 @@ func (e *paddleError) Error() string {
 
 var errPaddleUnsupported = &paddleError{kind: "unsupported"}
 
-func newPaddle(endpoint string, client *http.Client) *paddleClient {
+func newPaddle(endpoint, key string, client *http.Client) *paddleClient {
 	if client == nil {
 		client = http.DefaultClient
 	}
-	return &paddleClient{endpoint: endpoint, client: client, probeTTL: time.Minute,
+	return &paddleClient{endpoint: endpoint, key: key, client: client, probeTTL: time.Minute,
 		probeTimeout: 3 * time.Second, readTimeout: 300 * time.Second, now: time.Now}
 }
 
@@ -122,6 +123,9 @@ func (p *paddleClient) read(ctx context.Context, data []byte, mediaType string) 
 		return nil, &paddleError{kind: "unreachable"}
 	}
 	req.Header.Set("Content-Type", "application/json")
+	if p.key != "" {
+		req.Header.Set("Authorization", "Bearer "+p.key)
+	}
 	resp, err := p.client.Do(req)
 	if err != nil {
 		if !errors.Is(err, context.Canceled) {

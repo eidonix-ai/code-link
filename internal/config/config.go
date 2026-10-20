@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"net/url"
 	"path/filepath"
 	"strings"
 )
@@ -28,7 +29,18 @@ const (
 	OpenAICompatible BackendKind = "openai"
 	// Anthropic is a native Messages endpoint: requests pass through.
 	Anthropic BackendKind = "anthropic"
+	// GoLLMProxy is a go-llm-proxy gateway (e.g. llm.eidonix.com): Chat
+	// Completions like OpenAICompatible, and with the same key its web
+	// search and document reading, which code-link uses unless set up
+	// otherwise.
+	GoLLMProxy BackendKind = "gollm"
 )
+
+// GoLLMProxyURL is the default address of a Go-LLM-Proxy provider.
+const GoLLMProxyURL = "https://llm.eidonix.com/v1"
+
+// ChatCompletions: the backend speaks OpenAI Chat Completions.
+func (k BackendKind) ChatCompletions() bool { return k == OpenAICompatible || k == GoLLMProxy }
 
 // Backend is a provider.
 type Backend struct {
@@ -97,6 +109,9 @@ const (
 )
 
 type Documents struct {
+	// Via is a provider (a go-llm-proxy gateway) whose document reading is
+	// used, with that provider's key; it overrides PaddleOCR.
+	Via string `json:"via,omitempty"`
 	// PaddleOCR is a PaddleOCR(-VL) /layout-parsing endpoint, tried first.
 	PaddleOCR string `json:"paddleOCR,omitempty"`
 	// Local is used when PaddleOCR isn't set, is unreachable or fails.
@@ -111,6 +126,9 @@ const (
 )
 
 type WebSearch struct {
+	// Via is a provider (a go-llm-proxy gateway) whose web search is used,
+	// with that provider's key; it overrides Provider.
+	Via string `json:"via,omitempty"`
 	// Provider empty = off (searches answer "unavailable").
 	Provider SearchProvider `json:"provider,omitempty"`
 	APIKey   string         `json:"apiKey,omitempty"`
@@ -142,8 +160,15 @@ type Config struct {
 }
 
 // Default is a fresh configuration.
+// DefaultGatewayID is the built-in Go-LLM-Proxy provider's id.
+const DefaultGatewayID = "llm.eidonix.com"
+
+// Default is a fresh configuration: the built-in Go-LLM-Proxy provider
+// (llm.eidonix.com), waiting for the user's key.
 func Default() Config {
-	return Config{Port: DefaultPort, Backends: []Backend{}, Models: []Model{},
+	return Config{Port: DefaultPort,
+		Backends:  []Backend{{ID: DefaultGatewayID, Kind: GoLLMProxy, BaseURL: GoLLMProxyURL}},
+		Models:    []Model{},
 		Documents: Documents{Local: LocalOCR}}
 }
 
@@ -166,6 +191,56 @@ func (c *Config) Backend(id string) (Backend, bool) {
 		if b.ID == id {
 			return b, true
 		}
+	}
+	return Backend{}, false
+}
+
+// Gateway paths, from a go-llm-proxy's root (its GET /v1/capabilities
+// says which it offers).
+const (
+	GatewaySearchPath    = "/v1/search"
+	GatewayDocumentsPath = "/layout-parsing"
+)
+
+// GatewayURL is path on the root (scheme://host) of a provider's base URL.
+func GatewayURL(b Backend, path string) string {
+	u, err := url.Parse(strings.TrimSpace(b.BaseURL))
+	if err != nil || u.Scheme == "" || u.Host == "" {
+		return ""
+	}
+	return u.Scheme + "://" + u.Host + path
+}
+
+// Gateway is the first Go-LLM-Proxy provider with a key.
+func (c *Config) Gateway() (Backend, bool) {
+	for _, b := range c.Backends {
+		if b.Kind == GoLLMProxy && strings.TrimSpace(b.APIKey) != "" {
+			return b, true
+		}
+	}
+	return Backend{}, false
+}
+
+// SearchVia is the provider web search goes through: Via, else a
+// Go-LLM-Proxy when no search provider of the user's own is set.
+func (c *Config) SearchVia() (Backend, bool) {
+	if c.WebSearch.Via != "" {
+		return c.Backend(c.WebSearch.Via)
+	}
+	if c.WebSearch.Provider == "" {
+		return c.Gateway()
+	}
+	return Backend{}, false
+}
+
+// DocumentsVia is the provider documents go through: Via, else a
+// Go-LLM-Proxy when no PaddleOCR of the user's own is set.
+func (c *Config) DocumentsVia() (Backend, bool) {
+	if c.Documents.Via != "" {
+		return c.Backend(c.Documents.Via)
+	}
+	if strings.TrimSpace(c.Documents.PaddleOCR) == "" {
+		return c.Gateway()
 	}
 	return Backend{}, false
 }

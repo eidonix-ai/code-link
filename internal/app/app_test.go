@@ -88,7 +88,7 @@ func TestUnreadableConfigIsSetAsideNotOverwritten(t *testing.T) {
 	if b, _ := os.ReadFile(filepath.Join(dir, "code-link.unreadable.json")); string(b) != "{nope" {
 		t.Errorf("set aside: %q", b)
 	}
-	if c.Port != config.DefaultPort || len(c.Backends) != 0 || c.AccessToken == "" {
+	if c.Port != config.DefaultPort || len(c.Backends) != 1 || c.Backends[0].ID != config.DefaultGatewayID || c.AccessToken == "" {
 		t.Errorf("defaults: %+v", c)
 	}
 }

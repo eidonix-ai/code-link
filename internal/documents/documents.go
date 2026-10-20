@@ -42,12 +42,13 @@ type Service struct {
 var _ hooks.DocumentReader = (*Service)(nil)
 
 // New reads documents per cfg; client (nil = http.DefaultClient) reaches
-// PaddleOCR.
-func New(cfg config.Documents, client *http.Client) *Service {
+// PaddleOCR. key, when set, is sent to PaddleOCR as a bearer token (a
+// gateway's key).
+func New(cfg config.Documents, key string, client *http.Client) *Service {
 	s := &Service{local: localMode(cfg.Local), ocr: platformOCR(), textCap: DefaultTextCap,
 		cache: lru.New[hooks.DocumentOutput](cacheEntries, cacheBytes)}
 	if e := strings.TrimSpace(cfg.PaddleOCR); e != "" {
-		s.paddle = newPaddle(e, client)
+		s.paddle = newPaddle(e, key, client)
 	}
 	return s
 }
