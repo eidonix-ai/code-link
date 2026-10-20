@@ -11,7 +11,16 @@
 
   onMount(() => {
     Settings.Update().then((u) => (s = u));
-    return onUpdate((u) => (s = u));
+    const off = onUpdate((u) => (s = u));
+    // While a check or an update runs, ask again every few seconds rather
+    // than waiting only for its notice.
+    const poll = setInterval(() => {
+      if (s && (s.checking || s.job.running)) Settings.Update().then((u) => (s = u));
+    }, 3000);
+    return () => {
+      off();
+      clearInterval(poll);
+    };
   });
 
   async function check() {

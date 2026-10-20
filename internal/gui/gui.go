@@ -76,10 +76,15 @@ func Run(a *app.App, assets fs.FS, version string) error {
 	g := &GUI{app: a, launch: map[launch.Tool]*application.WebviewWindow{}, install: map[launch.Tool]*application.WebviewWindow{}}
 	// CODE_LINK_UPDATE_URL points at another (still signed) feed, for testing.
 	g.updater = selfupdate.New(selfupdate.Options{Current: version, ManifestURL: os.Getenv("CODE_LINK_UPDATE_URL"), OnChange: func() {
-		if g.wails != nil && g.tray != nil {
-			g.updateTray(false)
-			g.wails.Event.Emit(EventUpdate, g.updater.State())
-		}
+		// In the background: the menu is redrawn on the main thread, and a
+		// check must never wait on it (a check stuck in its first notice
+		// left Settings at "Checking for updates…").
+		go func() {
+			if g.wails != nil && g.tray != nil {
+				g.updateTray(false)
+				g.wails.Event.Emit(EventUpdate, g.updater.State())
+			}
+		}()
 	}})
 	g.wails = application.New(application.Options{
 		Name:        "code-link",
@@ -127,9 +132,13 @@ func Run(a *app.App, assets fs.FS, version string) error {
 	g.wails.Event.OnApplicationEvent(events.Mac.ApplicationShouldHandleReopen, func(*application.ApplicationEvent) { g.OpenSettings() })
 
 	a.OnChange = func() {
-		g.updateTray(false)
-		g.wails.Event.Emit(EventStatus, a.Status())
-		g.wails.Event.Emit(EventTools, "")
+		// In the background, like the updater's: callers hold no wait on the
+		// main thread's menu redraw.
+		go func() {
+			g.updateTray(false)
+			g.wails.Event.Emit(EventStatus, a.Status())
+			g.wails.Event.Emit(EventTools, "")
+		}()
 	}
 	a.OnJob = func(v app.JobView) { g.wails.Event.Emit(EventJob, v) }
 	a.Activity.OnAppend = func(e app.Entry) { g.wails.Event.Emit(EventActivity, e) }
