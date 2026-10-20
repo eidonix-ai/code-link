@@ -100,7 +100,7 @@ func TestPastingAKeyEnablesTheGatewaysModelsWithItsDefaultsAndSaves(t *testing.T
 		t.Errorf("status %+v", r.Save.Status)
 	}
 	// Web search and documents now go through the gateway on their own.
-	if r.View.SearchValue != "auto" || r.View.DocumentsValue != "auto" || r.View.Search[1].Label != "Through llm.eidonix.com (automatic)" {
+	if r.View.SearchValue != "auto" || r.View.DocumentsValue != "auto" || r.View.Search[0].Label != "Automatic, through llm.eidonix.com" {
 		t.Errorf("view %+v %+v", r.View.Search, r.View.DocumentsValue)
 	}
 }
@@ -175,13 +175,12 @@ func TestSearchChoices(t *testing.T) {
 		}
 		return out
 	}
-	// No keyed Go-LLM-Proxy: nothing automatic; the built-in one and a
-	// provider whose probe reported web search are offered.
-	if SearchChoice(&c) != "off" || !reflect.DeepEqual(values(SearchOptions(&c, probes)), []string{"off", "via:llm.eidonix.com", "via:gw2", "tavily", "brave"}) {
+	// No keyed Go-LLM-Proxy: nothing automatic.
+	if SearchChoice(&c) != "off" || !reflect.DeepEqual(values(SearchOptions(&c, probes)), []string{"tavily", "brave", "off"}) {
 		t.Errorf("%s %v", SearchChoice(&c), SearchOptions(&c, probes))
 	}
 	c.Backends[0].APIKey = "k"
-	if SearchChoice(&c) != "auto" || !reflect.DeepEqual(values(SearchOptions(&c, probes)), []string{"off", "auto", "via:gw2", "tavily", "brave"}) {
+	if SearchChoice(&c) != "auto" || !reflect.DeepEqual(values(SearchOptions(&c, probes)), []string{"auto", "tavily", "brave", "off"}) {
 		t.Errorf("%s %v", SearchChoice(&c), SearchOptions(&c, probes))
 	}
 	SetSearchChoice(&c, "off")
@@ -191,9 +190,12 @@ func TestSearchChoices(t *testing.T) {
 	if _, ok := c.SearchVia(); ok {
 		t.Error("off is really off with a keyed gateway")
 	}
-	SetSearchChoice(&c, "via:gw2")
+	SetSearchChoice(&c, "via:gw2") // an imported choice
 	if b, ok := c.SearchVia(); !ok || b.ID != "gw2" || c.WebSearch.Off || SearchChoice(&c) != "via:gw2" {
 		t.Errorf("%+v", c.WebSearch)
+	}
+	if o := SearchOptions(&c, probes); o[1] != (Option{"via:gw2", "Through gw2"}) {
+		t.Errorf("the current via is offered: %v", o)
 	}
 	c.WebSearch.APIKey = "tvly"
 	SetSearchChoice(&c, "tavily")
@@ -212,7 +214,7 @@ func TestDocumentsChoices(t *testing.T) {
 		t.Error("no gateway key: local")
 	}
 	c.Backends[0].APIKey = "k"
-	if DocumentsChoice(&c) != "auto" || DocumentsOptions(&c, nil)[0].Label != "Through llm.eidonix.com (automatic)" {
+	if DocumentsChoice(&c) != "auto" || DocumentsOptions(&c, nil)[0].Label != "Automatic, through llm.eidonix.com" {
 		t.Errorf("%v", DocumentsOptions(&c, nil))
 	}
 	SetDocumentsChoice(&c, "local")
@@ -264,7 +266,7 @@ func TestExportImportRoundTripAsksForKeys(t *testing.T) {
 	src := fresh(t, srv)
 	src.Backends[0].APIKey = "good"
 	src.Backends = append(src.Backends, config.Backend{ID: "cn3", Kind: config.OpenAICompatible, BaseURL: "http://cn3/v1", APIKey: "sk-cn3"})
-	EnableGateway(&src, config.DefaultGatewayID, a.Probe(context.Background(), src.Backends[0]), true)
+	SyncModels(&src, config.DefaultGatewayID, a.Probe(context.Background(), src.Backends[0]))
 	SetSearchChoice(&src, "off")
 	if r := a.Save(src); !r.OK {
 		t.Fatal(r)

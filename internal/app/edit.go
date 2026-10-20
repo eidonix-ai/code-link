@@ -1,6 +1,11 @@
 package app
 
-import "codelink/internal/config"
+import (
+	"context"
+
+	"codelink/internal/config"
+	"codelink/internal/core"
+)
 
 // View is the Settings page's draft with what it derives from it: the model
 // pickers (enabled models and the ones the last probe found), the decision
@@ -15,6 +20,8 @@ type View struct {
 	SearchValue    string   `json:"searchValue"`
 	Documents      []Option `json:"documents"`
 	DocumentsValue string   `json:"documentsValue"`
+	// Recommendation is the server's recommended model ("" = none yet).
+	Recommendation string `json:"recommendation"`
 }
 
 // Describe derives the view of a draft.
@@ -26,9 +33,10 @@ func (a *App) Describe(d config.Config) View {
 	if d.Models == nil {
 		d.Models = []config.Model{}
 	}
-	return View{Draft: d, Groups: Groups(&d, probes, false), Decision: DecisionNote(&d, probes),
+	return View{Draft: d, Groups: Groups(&d, probes, true), Decision: DecisionNote(&d, probes),
 		Search: SearchOptions(&d, probes), SearchValue: SearchChoice(&d),
-		Documents: DocumentsOptions(&d, probes), DocumentsValue: DocumentsChoice(&d)}
+		Documents: DocumentsOptions(&d, probes), DocumentsValue: DocumentsChoice(&d),
+		Recommendation: Recommendation(&d)}
 }
 
 func (a *App) warn(d config.Config, w string) View {
@@ -98,5 +106,32 @@ func (a *App) EditSetSearch(d config.Config, value string) View {
 // EditSetDocuments applies the documents picker.
 func (a *App) EditSetDocuments(d config.Config, value string) View {
 	SetDocumentsChoice(&d, value)
+	return a.Describe(d)
+}
+
+// ProbeView is a provider test's answer: the probe and the draft with the
+// provider's models synced in.
+type ProbeView struct {
+	Probe core.Probe `json:"probe"`
+	View  View       `json:"view"`
+}
+
+// EditProbe tests a provider as the draft has it and syncs its models.
+func (a *App) EditProbe(ctx context.Context, d config.Config, id string) ProbeView {
+	b, ok := d.Backend(id)
+	if !ok {
+		return ProbeView{View: a.Describe(d)}
+	}
+	p := a.Probe(ctx, b)
+	if Syncable(b) {
+		SyncModels(&d, id, p)
+	}
+	return ProbeView{Probe: p, View: a.Describe(d)}
+}
+
+// EditDefaultModel sets the default model ("" = the server's recommendation).
+func (a *App) EditDefaultModel(d config.Config, id string) View {
+	d.Launch.DefaultModel = id
+	ApplyRoles(&d)
 	return a.Describe(d)
 }

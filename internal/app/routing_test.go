@@ -12,6 +12,8 @@ import (
 	"codelink/internal/core"
 	"codelink/internal/engine"
 	"codelink/internal/hooks"
+	"codelink/internal/launch"
+	"codelink/internal/tools"
 )
 
 func ip(n int) *int          { return &n }
@@ -262,6 +264,7 @@ func newTestApp(t *testing.T) *App {
 	t.Setenv("HOME", dir) // never the real LaunchAgents or caches
 	a := New(filepath.Join(dir, "support", "code-link.json"), nil)
 	a.LoginItem = &fakeLogin{}
+	a.Tools = &fakeTools{info: map[launch.Tool]tools.Info{}}
 	a.Exe = func() (string, error) { return "/Applications/code-link.app/Contents/MacOS/code-link", nil }
 	t.Cleanup(a.Stop)
 	return a

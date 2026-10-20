@@ -42,5 +42,10 @@ func (a *App) ImportInto(d config.Config, data []byte) (ImportResult, error) {
 		return ImportResult{}, err
 	}
 	merged, res := share.Merge(d, f)
+	// The file's main model becomes the default model when it isn't just
+	// the server's recommendation.
+	if m := merged.Roles.Main; m != "" && m != Recommendation(&merged) {
+		merged.Launch.DefaultModel = m
+	}
 	return ImportResult{View: a.Describe(merged), Needs: Needs(&merged, res.NeedKey)}, nil
 }

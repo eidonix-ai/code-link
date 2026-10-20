@@ -52,8 +52,12 @@ type App struct {
 	client *upstream.Client
 	http   *http.Client
 
+	// OnJob hears an install or update's progress and end.
+	OnJob func(JobView)
+
 	// Seams for tests.
 	LoginItem LoginItem
+	Tools     Tools
 	Find      func(launch.Tool) (launch.Found, bool)
 	Open      func(o launch.Opener, command, folder, pathDir string) error
 	Exe       func() (string, error)
@@ -67,6 +71,7 @@ type App struct {
 	probes      map[string]core.Probe
 	loadWarning string
 	launching   bool
+	tools       toolState
 }
 
 // New loads the settings at path and builds the engine (not started).
@@ -74,7 +79,7 @@ type App struct {
 func New(path string, factory hooks.Factory) *App {
 	cfg, warning := LoadSettings(path)
 	a := &App{Path: path, Activity: &Activity{}, client: upstream.NewClient(), http: &http.Client{},
-		LoginItem: systemLoginItem{}, Find: launch.Find, Exe: loginitem.Exe,
+		LoginItem: systemLoginItem{}, Tools: systemTools{}, Find: launch.Find, Exe: loginitem.Exe,
 		Open: func(o launch.Opener, command, folder, pathDir string) error { return o.Open(command, folder, pathDir) },
 		cfg:  cfg, probes: map[string]core.Probe{}, loadWarning: warning}
 	a.engine = engine.New(cfg, a.Activity, factory)
@@ -281,6 +286,7 @@ type SaveResult struct {
 // listener, and the engine starts or stops with the main model. The access
 // token and the recent folders are the app's, not the page's.
 func (a *App) Save(draft config.Config) SaveResult {
+	ApplyRoles(&draft)
 	if p := Problems(&draft); len(p) > 0 {
 		return SaveResult{Problems: p, Saved: a.Config(), Status: a.Status()}
 	}
@@ -289,6 +295,7 @@ func (a *App) Save(draft config.Config) SaveResult {
 	old := a.cfg
 	draft.AccessToken = old.AccessToken
 	draft.Launch.RecentFolders = old.Launch.RecentFolders
+	draft.Launch.Last = old.Launch.Last
 	if err := config.Save(a.Path, draft); err != nil {
 		a.mu.Unlock()
 		return SaveResult{Problems: []string{"Could not save: " + err.Error()}, Saved: old, Status: a.Status()}
@@ -407,9 +414,10 @@ func (a *App) CheckSearch(ctx context.Context, p config.SearchProvider, key stri
 	return CheckSearch(ctx, a.http, p, key)
 }
 
-// LaunchContext is what the commands are rendered with: the port actually
-// listening, the access token, the --settings file and the permission mode.
-func (a *App) LaunchContext() (launch.Context, error) {
+// LaunchContext is what a session is rendered with: the port actually
+// listening, the access token, the --settings file, the permission mode and
+// the session's models.
+func (a *App) LaunchContext(o LaunchOptions) (launch.Context, error) {
 	a.mu.Lock()
 	cfg := a.cfg
 	a.mu.Unlock()
@@ -422,12 +430,18 @@ func (a *App) LaunchContext() (launch.Context, error) {
 		return launch.Context{}, err
 	}
 	return launch.Context{Config: &cfg, Port: port, Token: cfg.AccessToken, ClaudeSettingsPath: settings,
-		PermissionMode: cfg.Launch.PermissionMode}, nil
+		PermissionMode: cfg.Launch.PermissionMode, Model: o.Model, Heavy: o.Heavy, Background: o.Background}, nil
 }
 
-// Command is a tool's command in this platform's shell, for "Copy command".
+// Command is a tool's command in this platform's shell with the remembered
+// choices, for "Copy command".
 func (a *App) Command(t launch.Tool) (string, error) {
-	c, err := a.LaunchContext()
+	cfg := a.Config()
+	o := Remembered(&cfg, t, nil)
+	if o.Model == "" {
+		return "", ErrNotConfigured
+	}
+	c, err := a.LaunchContext(o)
 	if err != nil {
 		return "", err
 	}
@@ -460,10 +474,10 @@ func (e *TerminalError) Error() string {
 
 func (e *TerminalError) Unwrap() error { return e.Err }
 
-// Launch opens a tool in a terminal in folder (docs/DESIGN.md §3): it
-// finds the CLI, starts the engine if needed, writes the launch script and
-// remembers the folder.
-func (a *App) Launch(t launch.Tool, folder string) error {
+// Launch opens a tool in a terminal (docs/DESIGN.md §3) with the launch
+// window's choices: it checks the model, finds the CLI, starts the engine
+// if needed, writes the launch script and remembers the choices.
+func (a *App) Launch(t launch.Tool, o LaunchOptions) error {
 	a.mu.Lock()
 	if a.launching {
 		a.mu.Unlock()
@@ -474,8 +488,22 @@ func (a *App) Launch(t launch.Tool, folder string) error {
 	a.mu.Unlock()
 	defer func() { a.mu.Lock(); a.launching = false; a.mu.Unlock() }()
 
-	if !cfg.Configured() {
-		return ErrNotConfigured
+	if _, ok := cfg.Model(o.Model); !ok {
+		if len(cfg.Models) == 0 {
+			return ErrNotConfigured
+		}
+		return fmt.Errorf("the model %q isn't available any more; pick another", o.Model)
+	}
+	for _, m := range []string{o.Heavy, o.Background} {
+		if _, ok := cfg.Model(m); m != "" && !ok {
+			return fmt.Errorf("the model %q isn't available any more; pick another", m)
+		}
+	}
+	if o.Folder == "" {
+		return errors.New("choose a folder to start in")
+	}
+	if st, err := os.Stat(o.Folder); err != nil || !st.IsDir() {
+		return fmt.Errorf("the folder %s doesn't exist any more", o.Folder)
 	}
 	found, ok := a.Find(t)
 	if !ok {
@@ -488,7 +516,7 @@ func (a *App) Launch(t launch.Tool, folder string) error {
 		msg := a.Status().Line
 		return fmt.Errorf("the code-link engine isn't running (%s)", msg)
 	}
-	c, err := a.LaunchContext()
+	c, err := a.LaunchContext(o)
 	if err != nil {
 		return err
 	}
@@ -500,11 +528,27 @@ func (a *App) Launch(t launch.Tool, folder string) error {
 	if err != nil {
 		return &TerminalError{t, err}
 	}
-	if err := a.Open(launch.Opener{Dir: dir, Terminal: cfg.Launch.Terminal}, cmd, folder, found.PathDir); err != nil {
+	if err := a.Open(launch.Opener{Dir: dir, Terminal: cfg.Launch.Terminal}, cmd, o.Folder, found.PathDir); err != nil {
 		return &TerminalError{t, err}
 	}
-	a.AddRecentFolder(folder)
+	a.Remember(t, o)
 	return nil
+}
+
+// saveSynced writes settings changed by a model sync and applies them.
+func (a *App) saveSynced(cfg config.Config) {
+	a.mu.Lock()
+	old := a.cfg
+	a.cfg = cfg
+	config.Save(a.Path, cfg)
+	a.mu.Unlock()
+	a.applyEngine(old, cfg)
+	a.changed()
+}
+
+func mustJSON(v any) []byte {
+	b, _ := json.Marshal(v)
+	return b
 }
 
 // RecentFolders are the launch folders that still exist, newest first.

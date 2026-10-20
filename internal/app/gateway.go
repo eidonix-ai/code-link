@@ -52,32 +52,6 @@ func KeyError(b config.Backend, p core.Probe) string {
 	return "Can't reach " + host + ". Check your internet connection and try again."
 }
 
-// EnableGateway turns on every model a gateway's probe lists (with what
-// the probe learned) and, when setRoles, points the roles at the models
-// the gateway recommends: a recommendation it doesn't list is ignored,
-// and without a usable main recommendation the first listed model is main.
-func EnableGateway(c *config.Config, id string, p core.Probe, setRoles bool) {
-	ids := map[string]string{} // upstream → model id
-	for _, m := range p.Models {
-		m := m
-		ids[m.Upstream] = EnsureModel(c, Choice{id, m.Upstream}, &m)
-	}
-	if !setRoles || len(p.Models) == 0 {
-		return
-	}
-	var d core.GatewayDefaults
-	if p.Gateway != nil {
-		d = p.Gateway.Defaults
-	}
-	pick := func(upstream string) string { return ids[upstream] }
-	main := pick(d.Main)
-	if main == "" {
-		main = ids[p.Models[0].Upstream]
-	}
-	c.Roles = config.Roles{Main: main, Opus: pick(d.Opus), Small: pick(d.Small), Decision: pick(d.Decision),
-		Vision: pick(d.Vision), Codex: pick(d.Codex)}
-}
-
 // KeyNeed is a provider an import (or first run) wants a key for.
 type KeyNeed struct {
 	ID      string             `json:"id"`
@@ -117,9 +91,8 @@ type KeysResult struct {
 }
 
 // ApplyKeys puts keys on providers in a draft. A Go-LLM-Proxy is tested
-// with its key at once: when it answers, every model it lists is enabled
-// and, if the draft has no main model yet, the roles follow its
-// recommendations. With save, a draft whose keys all worked is saved.
+// with its key at once: when it answers, its models are synced in (with
+// its recommendations). With save, a draft whose keys all worked is saved.
 func (a *App) ApplyKeys(ctx context.Context, d config.Config, keys map[string]string, save bool) KeysResult {
 	errs := map[string]string{}
 	for i := range d.Backends {
@@ -141,7 +114,7 @@ func (a *App) ApplyKeys(ctx context.Context, d config.Config, keys map[string]st
 			errs[b.ID] = msg
 			continue
 		}
-		EnableGateway(&d, b.ID, p, !d.Configured())
+		SyncModels(&d, b.ID, p)
 	}
 	res := KeysResult{OK: len(errs) == 0, Errors: errs, View: a.Describe(d)}
 	if res.OK && save {
@@ -161,22 +134,6 @@ func (a *App) ApplyKeys(ctx context.Context, d config.Config, keys map[string]st
 type Option struct {
 	Value string `json:"value"`
 	Label string `json:"label"`
-}
-
-func offersSearch(b config.Backend, probes map[string]core.Probe) bool {
-	if b.Kind == config.GoLLMProxy {
-		return true
-	}
-	g := probes[b.ID].Gateway
-	return g != nil && g.WebSearch
-}
-
-func offersDocuments(b config.Backend, probes map[string]core.Probe) bool {
-	if b.Kind == config.GoLLMProxy {
-		return true
-	}
-	g := probes[b.ID].Gateway
-	return g != nil && g.Documents
 }
 
 // SearchChoice is the web search picker's value: off, auto (through a
@@ -200,18 +157,14 @@ func SearchChoice(c *config.Config) string {
 
 // SearchOptions are the web search picker's choices.
 func SearchOptions(c *config.Config, probes map[string]core.Probe) []Option {
-	out := []Option{{"off", "Off"}}
-	cur := SearchChoice(c)
-	auto, _ := c.Gateway()
-	if cur == "auto" {
-		out = append(out, Option{"auto", "Through " + auto.ID + " (automatic)"})
+	var out []Option
+	if g, ok := c.Gateway(); ok {
+		out = append(out, Option{"auto", "Automatic, through " + g.ID})
 	}
-	for _, b := range c.Backends {
-		if offersSearch(b, probes) && !(cur == "auto" && b.ID == auto.ID) {
-			out = append(out, Option{"via:" + b.ID, "Through " + b.ID})
-		}
+	if cur := SearchChoice(c); strings.HasPrefix(cur, "via:") {
+		out = append(out, Option{cur, "Through " + strings.TrimPrefix(cur, "via:")})
 	}
-	return append(out, Option{"tavily", "Tavily"}, Option{"brave", "Brave"})
+	return append(out, Option{"tavily", "Tavily"}, Option{"brave", "Brave"}, Option{"off", "Off"})
 }
 
 // SetSearchChoice applies a picker value to the draft.
@@ -250,15 +203,11 @@ func DocumentsChoice(c *config.Config) string {
 // DocumentsOptions are the documents picker's choices.
 func DocumentsOptions(c *config.Config, probes map[string]core.Probe) []Option {
 	var out []Option
-	cur := DocumentsChoice(c)
-	auto, _ := c.Gateway()
-	if cur == "auto" {
-		out = append(out, Option{"auto", "Through " + auto.ID + " (automatic)"})
+	if g, ok := c.Gateway(); ok {
+		out = append(out, Option{"auto", "Automatic, through " + g.ID})
 	}
-	for _, b := range c.Backends {
-		if offersDocuments(b, probes) && !(cur == "auto" && b.ID == auto.ID) {
-			out = append(out, Option{"via:" + b.ID, "Through " + b.ID})
-		}
+	if cur := DocumentsChoice(c); strings.HasPrefix(cur, "via:") {
+		out = append(out, Option{cur, "Through " + strings.TrimPrefix(cur, "via:")})
 	}
 	return append(out, Option{"paddle", "A PaddleOCR server"}, Option{"local", "On this computer only"})
 }
