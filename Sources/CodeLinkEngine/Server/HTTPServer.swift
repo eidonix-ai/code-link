@@ -119,7 +119,12 @@ final class HTTPServer: Sendable {
             }
         }
 
-        v1.get("models") { _, _ in ModelsList.response(environment()) }
+        // Anthropic clients (Claude Code) send anthropic-version and get the
+        // Anthropic list; everyone else gets the OpenAI one.
+        let anthropicVersion = HTTPField.Name("anthropic-version")!
+        v1.get("models") { request, _ in
+            ModelsList.response(environment(), anthropic: request.headers[anthropicVersion] != nil)
+        }
         v1.post("messages") { request, context in
             await withBody(request, context) { await MessagesHandler.handle($0, env: $1) }
         }
@@ -129,20 +134,27 @@ final class HTTPServer: Sendable {
         v1.post("responses") { request, context in
             await withBody(request, context) { await $1.responses.respond($0, env: $1) }
         }
+        v1.post("chat/completions") { request, context in
+            await withBody(request, context) { await ChatCompletionsHandler.handle($0, env: $1) }
+        }
         return router
     }
 }
 
 /// GET /v1/models: the configured models and the role aliases, in the
-/// Anthropic list shape.
+/// Anthropic list shape for Anthropic clients and the OpenAI one otherwise.
 enum ModelsList {
-    static func response(_ env: RequestEnvironment) -> Response {
-        var data: [JSON] = []
-        func entry(_ id: String, _ display: String) -> JSON {
-            ["type": "model", "id": .string(id), "display_name": .string(display), "created_at": "2026-01-01T00:00:00Z"]
+    static func response(_ env: RequestEnvironment, anthropic: Bool) -> Response {
+        var entries: [(id: String, display: String)] = env.config.models.map { ($0.id, $0.id) }
+        for (alias, m) in env.routing.aliases { entries.append((alias, "\(m.id) (\(alias))")) }
+        if !anthropic {
+            return .json(["object": "list", "data": .array(entries.map {
+                ["id": .string($0.id), "object": "model", "created": 1767225600, "owned_by": "code-link"]
+            })])
         }
-        for m in env.config.models { data.append(entry(m.id, m.id)) }
-        for (alias, m) in env.routing.aliases { data.append(entry(alias, "\(m.id) (\(alias))")) }
+        let data: [JSON] = entries.map {
+            ["type": "model", "id": .string($0.id), "display_name": .string($0.display), "created_at": "2026-01-01T00:00:00Z"]
+        }
         return .json(["data": .array(data), "has_more": false,
                       "first_id": data.first?["id"] ?? nil, "last_id": data.last?["id"] ?? nil])
     }

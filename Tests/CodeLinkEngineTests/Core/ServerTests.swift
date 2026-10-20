@@ -31,7 +31,7 @@ private let okCompletion: @Sendable (StubBackend.Seen, Int) -> StubBackend.Reply
 
     @Test func modelsListsConfiguredIDsAndRoleAliases() async throws {
         try await CoreHarness.run(backend: okCompletion) { h in
-            let r = try await h.request("GET", "/v1/models")
+            let r = try await h.request("GET", "/v1/models", headers: ["anthropic-version": "2023-06-01"])
             #expect(r.status == 200)
             let ids = (r.json?["data"]?.array ?? []).compactMap { $0["id"]?.string }
             #expect(ids == ["GLM", "Small", "Big", "sonnet", "opus", "haiku"])
