@@ -1,0 +1,15 @@
+{
+	"fixed": {
+		"file_version": "@VERSION@"
+	},
+	"info": {
+		"0409": {
+			"ProductVersion": "@VERSION@",
+			"CompanyName": "Eidonix",
+			"FileDescription": "code-link",
+			"LegalCopyright": "© Eidonix",
+			"ProductName": "code-link",
+			"Comments": "Claude Code and Codex on your own models"
+		}
+	}
+}
