@@ -1,0 +1,283 @@
+// Package config is code-link's one settings file: providers (with their
+// keys), models, roles, documents, web search, launch settings and the
+// engine's access token. See docs/DESIGN.md §6.
+package config
+
+import (
+	"crypto/rand"
+	"encoding/base64"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+)
+
+// DefaultPort is the engine's port (the Swift app uses 18765, so both can run).
+const DefaultPort = 18775
+
+// FileName is the settings file's name, in the user's config folder or next
+// to the program (portable mode).
+const FileName = "code-link.json"
+
+type BackendKind string
+
+const (
+	// OpenAICompatible is vLLM, SGLang, Flare: Chat Completions with SSE.
+	OpenAICompatible BackendKind = "openai"
+	// Anthropic is a native Messages endpoint: requests pass through.
+	Anthropic BackendKind = "anthropic"
+)
+
+// Backend is a provider.
+type Backend struct {
+	ID      string      `json:"id"`
+	Kind    BackendKind `json:"kind"`
+	BaseURL string      `json:"baseURL"`
+	APIKey  string      `json:"apiKey,omitempty"`
+}
+
+// Model is a model on a backend.
+type Model struct {
+	// ID is the name Claude Code and Codex see.
+	ID        string `json:"id"`
+	BackendID string `json:"backend"`
+	// Upstream is the name the backend expects.
+	Upstream string `json:"upstream"`
+	// ContextWindow nil = detect from the backend's /models (max_model_len).
+	ContextWindow *int `json:"contextWindow,omitempty"`
+	// AutoCompactAt nil = 85% of the context window.
+	AutoCompactAt *int `json:"autoCompactAt,omitempty"`
+	// Vision nil = probe on the first image.
+	Vision *bool `json:"vision,omitempty"`
+	// Logprobs nil = probe once.
+	Logprobs *bool `json:"logprobs,omitempty"`
+	// ThinkingOff is merged into a Chat Completions request when a client
+	// turns thinking off (e.g. {"reasoning_effort":"low"}).
+	ThinkingOff map[string]any `json:"thinkingOff,omitempty"`
+}
+
+// EffectiveAutoCompactAt is where Claude Code should compact.
+func (m Model) EffectiveAutoCompactAt() int {
+	if m.AutoCompactAt != nil {
+		return *m.AutoCompactAt
+	}
+	if m.ContextWindow != nil {
+		return *m.ContextWindow * 85 / 100
+	}
+	return 0
+}
+
+// Roles are model ids for each role; empty = the default described.
+type Roles struct {
+	// Main is Claude Code's default (the Sonnet slot) and ANTHROPIC_MODEL.
+	Main string `json:"main"`
+	// Opus also serves Claude Code's Fable tier. Empty = main.
+	Opus string `json:"opus,omitempty"`
+	// Small is the Haiku slot and background tasks. Empty = main.
+	Small string `json:"small,omitempty"`
+	// Decision answers auto-mode classifier requests; needs logprobs.
+	// Empty = main when it has them.
+	Decision string `json:"decision,omitempty"`
+	// Vision describes images for a model without vision. Empty = none.
+	Vision string `json:"vision,omitempty"`
+	// Codex is Codex's model. Empty = main.
+	Codex string `json:"codex,omitempty"`
+}
+
+type LocalExtraction string
+
+const (
+	// LocalOCR reads the PDF text layer and OCRs pages without one where
+	// the platform has OCR.
+	LocalOCR      LocalExtraction = "ocr"
+	LocalTextOnly LocalExtraction = "text"
+	LocalOff      LocalExtraction = "off"
+)
+
+type Documents struct {
+	// PaddleOCR is a PaddleOCR(-VL) /layout-parsing endpoint, tried first.
+	PaddleOCR string `json:"paddleOCR,omitempty"`
+	// Local is used when PaddleOCR isn't set, is unreachable or fails.
+	Local LocalExtraction `json:"local,omitempty"`
+}
+
+type SearchProvider string
+
+const (
+	Tavily SearchProvider = "tavily"
+	Brave  SearchProvider = "brave"
+)
+
+type WebSearch struct {
+	// Provider empty = off (searches answer "unavailable").
+	Provider SearchProvider `json:"provider,omitempty"`
+	APIKey   string         `json:"apiKey,omitempty"`
+}
+
+type Launch struct {
+	// Terminal: "iterm" / "terminal" on macOS, "wt" / "powershell" on
+	// Windows; empty = the platform's best available.
+	Terminal string `json:"terminal,omitempty"`
+	// PermissionMode for Claude Code; empty = auto.
+	PermissionMode string   `json:"permissionMode,omitempty"`
+	OpenAtLogin    bool     `json:"openAtLogin,omitempty"`
+	RecentFolders  []string `json:"recentFolders,omitempty"`
+}
+
+type Config struct {
+	Port int `json:"port"`
+	// AccessToken is the only credential sessions get; generated once.
+	AccessToken string    `json:"accessToken"`
+	Backends    []Backend `json:"backends"`
+	Models      []Model   `json:"models"`
+	Roles       Roles     `json:"roles"`
+	Documents   Documents `json:"documents"`
+	WebSearch   WebSearch `json:"webSearch"`
+	Launch      Launch    `json:"launch"`
+	// HeaderTimeoutSeconds is how long to wait for a backend's response
+	// headers (for a non-streaming request, the whole answer). 0 = 600 s.
+	HeaderTimeoutSeconds float64 `json:"headerTimeoutSeconds,omitempty"`
+}
+
+// Default is a fresh configuration.
+func Default() Config {
+	return Config{Port: DefaultPort, Backends: []Backend{}, Models: []Model{},
+		Documents: Documents{Local: LocalOCR}}
+}
+
+// Model is the configured model with this id.
+func (c *Config) Model(id string) (Model, bool) {
+	if id == "" {
+		return Model{}, false
+	}
+	for _, m := range c.Models {
+		if m.ID == id {
+			return m, true
+		}
+	}
+	return Model{}, false
+}
+
+// Backend is the configured backend with this id.
+func (c *Config) Backend(id string) (Backend, bool) {
+	for _, b := range c.Backends {
+		if b.ID == id {
+			return b, true
+		}
+	}
+	return Backend{}, false
+}
+
+// Configured: a main model on a known backend.
+func (c *Config) Configured() bool {
+	m, ok := c.Model(c.Roles.Main)
+	if !ok {
+		return false
+	}
+	_, ok = c.Backend(m.BackendID)
+	return ok
+}
+
+// normalize fills defaults after loading.
+func (c *Config) normalize() {
+	if c.Port == 0 {
+		c.Port = DefaultPort
+	}
+	if c.Backends == nil {
+		c.Backends = []Backend{}
+	}
+	if c.Models == nil {
+		c.Models = []Model{}
+	}
+	if c.Documents.Local == "" {
+		c.Documents.Local = LocalOCR
+	}
+	for i := range c.Backends {
+		if c.Backends[i].Kind == "" {
+			c.Backends[i].Kind = OpenAICompatible
+		}
+	}
+}
+
+// NewAccessToken is 32 random bytes, base64url.
+func NewAccessToken() string {
+	b := make([]byte, 32)
+	if _, err := rand.Read(b); err != nil {
+		panic(err)
+	}
+	return base64.RawURLEncoding.EncodeToString(b)
+}
+
+// Path is the settings file: next to the program when a code-link.json is
+// there (portable mode), else in the user's config folder
+// (~/Library/Application Support/Eidonix/code-link on macOS,
+// %AppData%\Eidonix\code-link on Windows).
+func Path() (string, error) {
+	if exe, err := os.Executable(); err == nil {
+		if exe, err = filepath.EvalSymlinks(exe); err == nil {
+			p := filepath.Join(filepath.Dir(exe), FileName)
+			if _, err := os.Stat(p); err == nil {
+				return p, nil
+			}
+		}
+	}
+	dir, err := os.UserConfigDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(dir, "Eidonix", "code-link", FileName), nil
+}
+
+// Load reads the file at path; a missing file gives the defaults. A new
+// access token is generated (and saved) when there is none.
+func Load(path string) (Config, error) {
+	c := Default()
+	data, err := os.ReadFile(path)
+	switch {
+	case errors.Is(err, os.ErrNotExist):
+	case err != nil:
+		return c, err
+	default:
+		if err := json.Unmarshal(data, &c); err != nil {
+			return Default(), fmt.Errorf("%s: %w", path, err)
+		}
+	}
+	c.normalize()
+	if strings.TrimSpace(c.AccessToken) == "" {
+		c.AccessToken = NewAccessToken()
+		if err := Save(path, c); err != nil {
+			return c, err
+		}
+	}
+	return c, nil
+}
+
+// Save writes the file atomically, readable only by the user.
+func Save(path string, c Config) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return err
+	}
+	data, err := json.MarshalIndent(c, "", "  ")
+	if err != nil {
+		return err
+	}
+	tmp, err := os.CreateTemp(filepath.Dir(path), ".code-link-*.json")
+	if err != nil {
+		return err
+	}
+	defer os.Remove(tmp.Name())
+	if err := tmp.Chmod(0o600); err != nil && !isWindows() {
+		tmp.Close()
+		return err
+	}
+	if _, err := tmp.Write(append(data, '\n')); err != nil {
+		tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	return os.Rename(tmp.Name(), path)
+}
