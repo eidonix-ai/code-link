@@ -113,9 +113,25 @@ final class AppModel {
         guard config.isConfigured else { return }
         startError = nil
         engineState = .starting
-        do { try await engine.start() } catch { startError = error.localizedDescription }
+        do { try await engine.start() } catch {
+            // Another program may hold the port: use the next free one. The
+            // status line and every launch use the port actually running.
+            if !(await startOnNextFreePort()) { startError = error.localizedDescription }
+        }
         engineState = await engine.state
         if isRunning { await checkMainBackend() }
+    }
+
+    /// Tries the ten ports after the configured one; true when one worked.
+    private func startOnNextFreePort() async -> Bool {
+        for port in (config.port + 1)...(config.port + 10) {
+            var c = config
+            c.port = port
+            await engine.apply(c)
+            if (try? await engine.start()) != nil, case .running = await engine.state { return true }
+        }
+        await engine.apply(config)
+        return false
     }
 
     func stop() async {
@@ -329,9 +345,16 @@ final class AppModel {
         do {
             if on { try SMAppService.mainApp.register() } else { try SMAppService.mainApp.unregister() }
         } catch {
-            Alerts.show("Couldn't change Launch at login", detail: error.localizedDescription)
+            Alerts.show("Couldn't change Open at login", detail: error.localizedDescription)
         }
-        launchAtLogin = SMAppService.mainApp.status == .enabled
+        let status = SMAppService.mainApp.status
+        launchAtLogin = status == .enabled
+        if on, status == .requiresApproval {
+            // macOS asks the user to allow the login item once.
+            Alerts.show("Allow code-link in Login Items",
+                        detail: "macOS needs your approval: turn code-link on under System Settings → General → Login Items. That pane opens now.")
+            SMAppService.openSystemSettingsLoginItems()
+        }
     }
 }
 

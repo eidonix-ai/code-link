@@ -20,7 +20,7 @@ final class SettingsWindow: NSObject, NSWindowDelegate {
             w.styleMask = [.titled, .closable, .miniaturizable, .resizable]
             w.isReleasedWhenClosed = false
             w.setFrameAutosaveName("CodeLinkSettings")
-            if w.frame.width < 400 { w.setContentSize(NSSize(width: 640, height: 780)) }
+            if w.frame.width < 400 { w.setContentSize(NSSize(width: 560, height: 680)) }
             w.delegate = self
             w.center()
             window = w
