@@ -396,6 +396,8 @@ private func toolNames(_ chat: JSON) -> [String] {
         #expect(routing.resolve("Flash")?.id == "Flash")
         #expect(routing.resolve("claude-opus-5[1m]")?.id == "Heavy")
         #expect(routing.resolve("claude-opus-4-1-20250805")?.id == "Heavy")
+        #expect(routing.resolve("claude-fable-5-1")?.id == "Heavy")
+        #expect(routing.resolve("claude-mythos-5-1")?.id == "Heavy")
         #expect(routing.resolve("claude-haiku-4-5-20251001")?.id == "Flash")
         #expect(routing.resolve("claude-sonnet-5")?.id == "GLM-5.3")
         #expect(routing.resolve("claude-sonnet-4-5[1m]")?.id == "GLM-5.3")

@@ -25,8 +25,13 @@ private func ctx(_ c: EngineConfig, mode: String = "auto") -> LaunchContext {
     ANTHROPIC_AUTH_TOKEN=tok_en-1 \\
     ANTHROPIC_MODEL=GLM-5.3 \\
     ANTHROPIC_DEFAULT_SONNET_MODEL=GLM-5.3 \\
+    ANTHROPIC_DEFAULT_SONNET_MODEL_NAME=GLM-5.3 \\
     ANTHROPIC_DEFAULT_OPUS_MODEL=Big \\
+    ANTHROPIC_DEFAULT_OPUS_MODEL_NAME=Big \\
+    ANTHROPIC_DEFAULT_FABLE_MODEL=Big \\
+    ANTHROPIC_DEFAULT_FABLE_MODEL_NAME=Big \\
     ANTHROPIC_DEFAULT_HAIKU_MODEL=Tiny \\
+    ANTHROPIC_DEFAULT_HAIKU_MODEL_NAME=Tiny \\
     ANTHROPIC_SMALL_FAST_MODEL=Tiny \\
     CLAUDE_CODE_AUTO_MODE_SERVER=0 \\
     CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1 \\
@@ -39,7 +44,7 @@ private func ctx(_ c: EngineConfig, mode: String = "auto") -> LaunchContext {
 
 @Test func claudeAliasesDefaultToMainAndNeverSetClaudeOnlyFlags() throws {
     let cmd = try LaunchCommand.claude(ctx(config()))
-    for name in ["ANTHROPIC_DEFAULT_OPUS_MODEL", "ANTHROPIC_DEFAULT_HAIKU_MODEL", "ANTHROPIC_SMALL_FAST_MODEL"] {
+    for name in ["ANTHROPIC_DEFAULT_OPUS_MODEL", "ANTHROPIC_DEFAULT_FABLE_MODEL", "ANTHROPIC_DEFAULT_HAIKU_MODEL", "ANTHROPIC_SMALL_FAST_MODEL"] {
         #expect(cmd.contains("\(name)=GLM-5.3 "))
     }
     #expect(!cmd.contains("DISABLE_PROMPT_CACHING"))

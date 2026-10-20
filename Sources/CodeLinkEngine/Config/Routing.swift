@@ -59,7 +59,7 @@ struct Routing: Sendable {
         if let m = model(id: name) { return m }
         let lower = name.lowercased()
         if let m = config.models.first(where: { $0.id.lowercased() == lower }) { return m }
-        if lower.contains("opus") { return model(id: config.roles.opus) ?? mainModel }
+        if lower.contains("opus") || lower.contains("fable") || lower.contains("mythos") { return model(id: config.roles.opus) ?? mainModel }
         if lower.contains("haiku") { return model(id: config.roles.small) ?? mainModel }
         return mainModel
     }
