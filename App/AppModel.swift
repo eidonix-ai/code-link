@@ -135,9 +135,10 @@ final class AppModel {
 
     // MARK: Settings
 
+    @ObservationIgnored private lazy var settingsWindow = SettingsWindow { [unowned self] in AnyView(SettingsView(model: self)) }
+
     func openSettings() {
-        NSApp.activate()
-        NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
+        settingsWindow.show()
     }
 
     func save() async {
