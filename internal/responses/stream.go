@@ -217,12 +217,18 @@ func (t *translator) reasoningText(s string) {
 		t.emit("response.output_item.added", map[string]any{
 			"item":         map[string]any{"id": t.reasoning.id, "type": "reasoning", "summary": []any{}, "content": []any{}},
 			"output_index": t.reasoning.index})
+		// Codex's status line shows the summary's latest line while it
+		// streams: a fixed heading keeps it at "Thinking"; the reasoning
+		// itself joins the summary when the block ends (Codex shows it in
+		// the expanded transcript, not the main view).
 		t.emit("response.reasoning_summary_part.added", map[string]any{"item_id": t.reasoning.id, "output_index": t.reasoning.index, "summary_index": 0})
+		t.emit("response.reasoning_summary_text.delta", map[string]any{"delta": reasoningHeading, "item_id": t.reasoning.id, "output_index": t.reasoning.index, "summary_index": 0})
 	}
 	r := t.reasoning
 	r.text += s
 	t.roundReason += s
-	t.emit("response.reasoning_summary_text.delta", map[string]any{"delta": s, "item_id": r.id, "output_index": r.index, "summary_index": 0})
+	// Raw reasoning streams as reasoning_text, which Codex keeps out of view
+	// unless show_raw_agent_reasoning is on.
 	t.emit("response.reasoning_text.delta", map[string]any{"delta": s, "item_id": r.id, "output_index": r.index, "content_index": 0})
 }
 
@@ -232,7 +238,11 @@ func (t *translator) closeReasoning() {
 		return
 	}
 	t.reasoning = nil
-	t.emit("response.reasoning_summary_text.done", map[string]any{"text": r.text, "item_id": r.id, "output_index": r.index, "summary_index": 0})
+	body := strings.TrimSpace(r.text)
+	if body != "" {
+		t.emit("response.reasoning_summary_text.delta", map[string]any{"delta": "\n\n" + body, "item_id": r.id, "output_index": r.index, "summary_index": 0})
+	}
+	t.emit("response.reasoning_summary_text.done", map[string]any{"text": reasoningSummary(r.text), "item_id": r.id, "output_index": r.index, "summary_index": 0})
 	t.emit("response.reasoning_text.done", map[string]any{"text": r.text, "item_id": r.id, "output_index": r.index, "content_index": 0})
 	item := reasoningItem(r.id, r.text)
 	t.emit("response.output_item.done", map[string]any{"item": item, "output_index": r.index})

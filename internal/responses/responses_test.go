@@ -654,10 +654,9 @@ func TestStreamingEventOrder(t *testing.T) {
 	ev := r.Events()
 	eq(t, "events", testkit.Names(ev), []string{
 		"response.created", "response.in_progress",
-		"response.output_item.added", "response.reasoning_summary_part.added",
-		"response.reasoning_summary_text.delta", "response.reasoning_text.delta",
-		"response.reasoning_summary_text.delta", "response.reasoning_text.delta",
-		"response.reasoning_summary_text.done", "response.reasoning_text.done", "response.output_item.done",
+		"response.output_item.added", "response.reasoning_summary_part.added", "response.reasoning_summary_text.delta",
+		"response.reasoning_text.delta", "response.reasoning_text.delta",
+		"response.reasoning_summary_text.delta", "response.reasoning_summary_text.done", "response.reasoning_text.done", "response.output_item.done",
 		"response.output_item.added", "response.content_part.added",
 		"response.output_text.delta", "response.output_text.delta",
 		"response.output_text.done", "response.content_part.done", "response.output_item.done",
@@ -689,8 +688,13 @@ func TestStreamingEventOrder(t *testing.T) {
 	if jsonx.Type(reasoning) != "reasoning" || jsonx.Get(reasoning, "content", 0, "text") != "think hard" {
 		t.Errorf("reasoning = %s", jsonx.String(reasoning))
 	}
-	if jsonx.Get(reasoning, "summary", 0, "type") != "summary_text" || jsonx.Get(reasoning, "summary", 0, "text") != "think hard" {
+	// The summary streams only the heading (Codex's status line shows its
+	// latest line), then the reasoning once the block ends.
+	if jsonx.Get(reasoning, "summary", 0, "text") != "**Thinking**\n\nthink hard" {
 		t.Errorf("reasoning summary = %s", jsonx.String(reasoning))
+	}
+	if d := data(ev, "response.reasoning_summary_text.delta"); len(d) != 2 || d[0]["delta"] != "**Thinking**" || d[1]["delta"] != "\n\nthink hard" {
+		t.Errorf("summary deltas = %v", d)
 	}
 	if got := data(ev, "response.reasoning_text.done")[0]["text"]; got != "think hard" {
 		t.Errorf("reasoning_text.done = %v", got)

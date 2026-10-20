@@ -156,6 +156,7 @@ func (a *App) QuickProbe(ctx context.Context, b config.Backend, known *config.Co
 	} else {
 		return p
 	}
+	p.Models = core.OfferedModels(p.Models, p.Gateway)
 	var wg sync.WaitGroup
 	sem := make(chan struct{}, 4)
 	for i := range p.Models {

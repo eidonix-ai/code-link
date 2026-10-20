@@ -1,6 +1,7 @@
 package responses
 
 import (
+	"strings"
 	"time"
 
 	"codelink/internal/ids"
@@ -44,12 +45,25 @@ func (u usage) responses() map[string]any {
 	}
 }
 
-// reasoningItem is a completed reasoning item: the text as a summary (what
-// clients show) and as reasoning_text content (what they replay in later
-// requests).
+// reasoningHeading is the summary's first line for a local model's
+// reasoning (which has no summary of its own): Codex shows it in its status
+// line while the model thinks.
+const reasoningHeading = "**Thinking**"
+
+// reasoningSummary is the heading and then the reasoning: Codex lists it in
+// the expanded transcript (Ctrl+T), not in the main view.
+func reasoningSummary(text string) string {
+	if body := strings.TrimSpace(text); body != "" {
+		return reasoningHeading + "\n\n" + body
+	}
+	return reasoningHeading
+}
+
+// reasoningItem is a completed reasoning item: the summary as above, and the
+// text as reasoning_text content (what clients replay in later requests).
 func reasoningItem(id, text string) map[string]any {
 	return map[string]any{"id": id, "type": "reasoning",
-		"summary": []any{map[string]any{"type": "summary_text", "text": text}},
+		"summary": []any{map[string]any{"type": "summary_text", "text": reasoningSummary(text)}},
 		"content": []any{map[string]any{"type": "reasoning_text", "text": text}}}
 }
 

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"regexp"
 	"sync"
 	"time"
 
@@ -42,6 +43,9 @@ type Gateway struct {
 	// Defaults are the gateway's recommended models per role (upstream
 	// ids), set by its operator; empty = none.
 	Defaults GatewayDefaults `json:"defaults"`
+	// Models are the ones its operator offers in code-link (that this key
+	// may use); nil = the operator marked none, so code-link decides.
+	Models []string `json:"models,omitempty"`
 }
 
 // GatewayDefaults are recommended model ids for code-link's roles.
@@ -77,7 +81,43 @@ func ProbeGateway(ctx context.Context, client *upstream.Client, b config.Backend
 	d := jsonx.Obj(j["defaults"])
 	g.Defaults = GatewayDefaults{Main: jsonx.Str(d["main"]), Opus: jsonx.Str(d["opus"]), Small: jsonx.Str(d["small"]),
 		Decision: jsonx.Str(d["decision"]), Vision: jsonx.Str(d["vision"]), Codex: jsonx.Str(d["codex"])}
+	if list, ok := j["models"].([]any); ok {
+		g.Models = []string{}
+		for _, m := range list {
+			if s := jsonx.Str(m); s != "" {
+				g.Models = append(g.Models, s)
+			}
+		}
+	}
 	return g
+}
+
+// notForCoding are models a coding session can't run: embeddings,
+// rerankers, speech and OCR.
+var notForCoding = regexp.MustCompile(`(?i)(embed|rerank|whisper|transcri|tts|kokoro|speech|paddle|ocr)`)
+
+// OfferedModels are the models a coding session may pick: the gateway's
+// list when its operator made one, else everything but embedding,
+// reranker, speech and OCR models. The other models still work for what
+// they are; they just aren't offered for a session.
+func OfferedModels(models []ProbedModel, g *Gateway) []ProbedModel {
+	out := []ProbedModel{}
+	if g != nil && g.Models != nil {
+		for _, name := range g.Models {
+			for _, m := range models {
+				if m.Upstream == name {
+					out = append(out, m)
+				}
+			}
+		}
+		return out
+	}
+	for _, m := range models {
+		if !notForCoding.MatchString(m.Upstream) {
+			out = append(out, m)
+		}
+	}
+	return out
 }
 
 // ListModels is the ids and context windows a backend's /models lists.
@@ -199,6 +239,8 @@ func ProbeBackend(ctx context.Context, client *upstream.Client, b config.Backend
 	if !b.Kind.ChatCompletions() {
 		return p
 	}
+	p.Models = OfferedModels(p.Models, p.Gateway)
+	models = p.Models
 	sem := make(chan struct{}, 4)
 	var wg sync.WaitGroup
 	for i := range min(len(models), 16) {
