@@ -22,6 +22,9 @@ import * as config$0 from "../config/models.js";
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
 import * as launch$0 from "../launch/models.js";
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore: Unused imports
+import * as selfupdate$0 from "../selfupdate/models.js";
 
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
@@ -57,6 +60,20 @@ export function CancelJob(tool: launch$0.Tool): $CancellablePromise<void> {
 }
 
 /**
+ * CancelUpdate stops an update that is still downloading.
+ */
+export function CancelUpdate(): $CancellablePromise<void> {
+    return $Call.ByID(2503553368);
+}
+
+/**
+ * CheckForUpdates checks for a newer code-link now.
+ */
+export function CheckForUpdates(): $CancellablePromise<selfupdate$0.State> {
+    return $Call.ByID(372394290);
+}
+
+/**
  * ChooseFolder asks for a launch folder; "" when cancelled.
  */
 export function ChooseFolder(tool: launch$0.Tool, current: string): $CancellablePromise<string> {
@@ -75,6 +92,13 @@ export function ClearActivity(): $CancellablePromise<void> {
  */
 export function Close(): $CancellablePromise<void> {
     return $Call.ByID(3916431365);
+}
+
+/**
+ * CloseUpdate hides the update's progress window.
+ */
+export function CloseUpdate(): $CancellablePromise<void> {
+    return $Call.ByID(4079677908);
 }
 
 /**
@@ -221,6 +245,13 @@ export function SetSearch(draft: config$0.Config, value: string): $CancellablePr
 }
 
 /**
+ * StartUpdate installs the newer code-link, showing its progress window.
+ */
+export function StartUpdate(): $CancellablePromise<selfupdate$0.State> {
+    return $Call.ByID(2277056900);
+}
+
+/**
  * Status is the engine's status line.
  */
 export function Status(): $CancellablePromise<app$0.Status> {
@@ -246,4 +277,11 @@ export function TestSearch(provider: config$0.SearchProvider, key: string): $Can
  */
 export function Tools(): $CancellablePromise<app$0.ToolView[] | null> {
     return $Call.ByID(462807518);
+}
+
+/**
+ * Update is code-link's own version and update state.
+ */
+export function Update(): $CancellablePromise<selfupdate$0.State> {
+    return $Call.ByID(589708750);
 }

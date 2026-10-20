@@ -38,3 +38,8 @@ export const Status = "status";
  */
 export const Tools = "tools";
 
+/**
+ * Name of the custom event "update".
+ */
+export const Update = "update";
+

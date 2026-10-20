@@ -2,6 +2,7 @@
 //
 //	code-link                      the tray app (menu bar on macOS)
 //	code-link serve [config.json]  the engine alone, in the foreground
+//	code-link version              the version
 package main
 
 import (
@@ -18,6 +19,7 @@ import (
 	"codelink/internal/features"
 	"codelink/internal/gui"
 	"codelink/internal/hooks"
+	"codelink/internal/selfupdate"
 )
 
 //go:embed all:frontend/dist
@@ -27,15 +29,25 @@ var assets embed.FS
 // auto mode).
 var featuresFactory hooks.Factory = features.Factory
 
+// version is set by scripts/build.sh (-ldflags "-X main.version=0.2.0"); a
+// plain `go build` is a development build that doesn't update itself.
+var version = "dev"
+
 func main() {
-	args := os.Args[1:]
+	// Started by an update: wait for the old copy to exit and remove it.
+	args := selfupdate.AfterRelaunch(os.Args[1:])
+	os.Args = append([]string{os.Args[0]}, args...)
 	if len(args) > 0 {
 		switch args[0] {
 		case "serve":
 			os.Exit(serve(args[1:]))
+		case "-v", "-version", "--version", "version":
+			attachConsole()
+			fmt.Println("code-link", version)
+			return
 		case "-h", "-help", "--help", "help":
 			attachConsole()
-			fmt.Println("usage:\n  code-link                      run the tray app\n  code-link serve [config.json]  run the engine alone (Ctrl-C stops it)")
+			fmt.Println("usage:\n  code-link                      run the tray app\n  code-link serve [config.json]  run the engine alone (Ctrl-C stops it)\n  code-link version              print the version")
 			return
 		}
 	}
@@ -47,7 +59,7 @@ func main() {
 	if err != nil {
 		fatal(err)
 	}
-	if err := gui.Run(app.New(path, featuresFactory), dist); err != nil {
+	if err := gui.Run(app.New(path, featuresFactory), dist, version); err != nil {
 		fatal(err)
 	}
 }

@@ -14,6 +14,12 @@ export interface Gateway {
      * ids), set by its operator; empty = none.
      */
     "defaults": GatewayDefaults;
+
+    /**
+     * Models are the ones its operator offers in code-link (that this key
+     * may use); nil = the operator marked none, so code-link decides.
+     */
+    "models"?: string[] | null;
 }
 
 /**
