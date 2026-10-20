@@ -1,11 +1,12 @@
 package chat
 
 import (
-	"crypto/rand"
 	"strings"
 	"time"
 
+	"codelink/internal/ids"
 	"codelink/internal/jsonx"
+	"codelink/internal/media"
 )
 
 // Chat Completions ↔ Anthropic Messages, for a Chat client on an Anthropic
@@ -176,41 +177,13 @@ func image(p map[string]any) map[string]any {
 		return nil
 	}
 	if strings.HasPrefix(url, "data:") {
-		mediaType, data, ok := dataURL(url)
+		mediaType, data, ok := media.DataURL(url)
 		if !ok {
 			return nil
 		}
 		return map[string]any{"type": "image", "source": map[string]any{"type": "base64", "media_type": mediaType, "data": data}}
 	}
 	return map[string]any{"type": "image", "source": map[string]any{"type": "url", "url": url}}
-}
-
-// dataURL splits a base64 data: URL into its media type and data.
-func dataURL(s string) (mediaType, data string, ok bool) {
-	rest, found := strings.CutPrefix(s, "data:")
-	if !found {
-		return "", "", false
-	}
-	header, data, found := strings.Cut(rest, ",")
-	if !found {
-		return "", "", false
-	}
-	parts := strings.Split(header, ";")
-	base64 := false
-	for i, p := range parts {
-		parts[i] = strings.TrimSpace(p)
-		if strings.EqualFold(parts[i], "base64") {
-			base64 = true
-		}
-	}
-	if !base64 {
-		return "", "", false
-	}
-	mediaType = strings.ToLower(parts[0])
-	if mediaType == "" || mediaType == "base64" {
-		mediaType = "application/octet-stream"
-	}
-	return mediaType, data, true
 }
 
 func assistantBlocks(m map[string]any) []any {
@@ -355,7 +328,7 @@ func fromAnthropic(message map[string]any, model string) map[string]any {
 	}
 	id := jsonx.Str(message["id"])
 	if !strings.HasPrefix(id, "chatcmpl-") {
-		id = newID("chatcmpl-")
+		id = ids.New("chatcmpl-")
 	}
 	return map[string]any{
 		"id": id, "object": "chat.completion", "created": time.Now().Unix(), "model": model,
@@ -369,16 +342,4 @@ func orEmpty(v any) any {
 		return ""
 	}
 	return v
-}
-
-const idAlphabet = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
-
-// newID is prefix + 24 random alphanumerics.
-func newID(prefix string) string {
-	b := make([]byte, 24)
-	rand.Read(b)
-	for i := range b {
-		b[i] = idAlphabet[int(b[i])%len(idAlphabet)]
-	}
-	return prefix + string(b)
 }

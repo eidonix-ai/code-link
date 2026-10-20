@@ -5,7 +5,9 @@ import (
 
 	"codelink/internal/apierr"
 	"codelink/internal/httpx"
+	"codelink/internal/ids"
 	"codelink/internal/jsonx"
+	"codelink/internal/thinktag"
 	"codelink/internal/upstream"
 )
 
@@ -50,7 +52,7 @@ type streamTranslator struct {
 	backendStop  string
 	usage        *chatUsage
 	usageSum     chatUsage
-	think        thinkFilter
+	think        thinktag.Filter
 	roundClosed  bool
 	roundText    strings.Builder
 	roundReason  strings.Builder
@@ -60,7 +62,7 @@ type streamTranslator struct {
 
 func newStreamTranslator(sink *httpx.Stream, model string, stopSequences []string, searchMode bool) *streamTranslator {
 	return &streamTranslator{sink: sink, model: model, stopSequences: stopSequences, searchMode: searchMode,
-		msgID: newID("msg_"), tools: map[int]*toolState{}}
+		msgID: ids.New("msg_"), tools: map[int]*toolState{}}
 }
 
 func (t *streamTranslator) emit(event string, data obj) { t.sink.Event(event, data) }
@@ -120,7 +122,7 @@ func (t *streamTranslator) line(line string) lineResult {
 		t.thinking(reasoning)
 	}
 	if c := jsonx.Str(jsonx.Get(delta, "content")); c != "" {
-		t.segments(t.think.process(c))
+		t.segments(t.think.Process(c))
 	}
 	for _, tc := range jsonx.Arr(jsonx.Get(delta, "tool_calls")) {
 		t.toolDelta(tc)
@@ -134,12 +136,12 @@ func (t *streamTranslator) line(line string) lineResult {
 	return lineMore
 }
 
-func (t *streamTranslator) segments(segs []segment) {
+func (t *streamTranslator) segments(segs []thinktag.Segment) {
 	for _, s := range segs {
-		if s.reasoning {
-			t.thinking(s.text)
+		if s.Reasoning {
+			t.thinking(s.Text)
 		} else {
-			t.text(s.text)
+			t.text(s.Text)
 		}
 	}
 }
@@ -181,7 +183,7 @@ func (t *streamTranslator) toolDelta(tc any) {
 		t.closeText()
 		callID := id
 		if callID == "" {
-			callID = newID("toolu_")
+			callID = ids.New("toolu_")
 		}
 		isHeld := t.searchMode && name == webSearchFunction
 		state = &toolState{callID: callID, name: name, blockIndex: -1, held: isHeld}
@@ -257,7 +259,7 @@ func (t *streamTranslator) finishRound() {
 	}
 	t.roundClosed = true
 	t.start()
-	t.segments(t.think.flush())
+	t.segments(t.think.Flush())
 	t.closeThinking()
 	t.closeText()
 	for _, s := range t.toolOrder {
@@ -327,7 +329,7 @@ func (t *streamTranslator) nextRound() {
 	t.toolOrder, t.held = nil, nil
 	t.finishReason, t.backendStop, t.usage = "", "", nil
 	t.roundClosed = false
-	t.think = thinkFilter{}
+	t.think = thinktag.Filter{}
 	t.roundText.Reset()
 	t.roundReason.Reset()
 }

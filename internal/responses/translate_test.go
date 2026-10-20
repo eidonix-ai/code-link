@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"codelink/internal/jsonx"
+	"codelink/internal/thinktag"
 )
 
 func obj(s string) any {
@@ -74,35 +75,35 @@ func TestCleanStructuredOutput(t *testing.T) {
 }
 
 func TestThinkFilterAcrossChunks(t *testing.T) {
-	var f thinkFilter
+	var f thinktag.Filter
 	var reasoning, content string
 	for _, c := range []string{"<thi", "nk>let me see</th", "ink>The answer"} {
-		for _, s := range f.process(c) {
-			if s.reasoning {
-				reasoning += s.text
+		for _, s := range f.Process(c) {
+			if s.Reasoning {
+				reasoning += s.Text
 			} else {
-				content += s.text
+				content += s.Text
 			}
 		}
 	}
-	for _, s := range f.flush() {
-		content += s.text
+	for _, s := range f.Flush() {
+		content += s.Text
 	}
 	if reasoning != "let me see" || content != "The answer" {
 		t.Errorf("reasoning %q content %q", reasoning, content)
 	}
 	// A lone leading </think> is dropped.
-	f = thinkFilter{}
+	f = thinktag.Filter{}
 	var out string
 	for _, c := range []string{" </thi", "nk>allow"} {
-		for _, s := range f.process(c) {
-			out += s.text
+		for _, s := range f.Process(c) {
+			out += s.Text
 		}
 	}
 	if out != "allow" {
 		t.Errorf("lone close → %q", out)
 	}
-	if r, c := stripThink("<think>hmm</think>done"); r != "hmm" || c != "done" {
+	if r, c := thinktag.Strip("<think>hmm</think>done"); r != "hmm" || c != "done" {
 		t.Errorf("strip = %q %q", r, c)
 	}
 }

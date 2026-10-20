@@ -1,23 +1,26 @@
-package messages
+// Package thinktag separates <think>…</think> reasoning that some backends
+// put in the content field from the answer.
+package thinktag
 
 import (
 	"strings"
 	"unicode"
 )
 
-// thinkFilter separates <think>…</think> reasoning that some backends put
+// Filter separates <think>…</think> reasoning that some backends put
 // in the content field from the answer, across chunk boundaries. A lone
 // leading </think> (GLM templates with thinking off) is dropped, so an
 // answer that must start with a verdict does.
-type thinkFilter struct {
+type Filter struct {
 	inside  bool
 	pending string
 	started bool
 }
 
-type segment struct {
-	text      string
-	reasoning bool
+// Segment is a run of answer text, or of reasoning.
+type Segment struct {
+	Text      string
+	Reasoning bool
 }
 
 const (
@@ -27,10 +30,11 @@ const (
 
 func trimLeftSpace(s string) string { return strings.TrimLeftFunc(s, unicode.IsSpace) }
 
-func (f *thinkFilter) process(chunk string) []segment {
+// Process takes the next chunk of content.
+func (f *Filter) Process(chunk string) []Segment {
 	input := f.pending + chunk
 	f.pending = ""
-	var out []segment
+	var out []Segment
 	for input != "" {
 		if !f.inside && !f.started {
 			t := trimLeftSpace(input)
@@ -53,7 +57,7 @@ func (f *thinkFilter) process(chunk string) []segment {
 		}
 		if i := strings.Index(input, tag); i >= 0 {
 			if i > 0 {
-				out = append(out, segment{input[:i], f.inside})
+				out = append(out, Segment{input[:i], f.inside})
 			}
 			input = input[i+len(tag):]
 			f.inside = !f.inside
@@ -64,11 +68,11 @@ func (f *thinkFilter) process(chunk string) []segment {
 		}
 		if n := longestTagSuffix(input, tag); n > 0 {
 			if keep := input[:len(input)-n]; keep != "" {
-				out = append(out, segment{keep, f.inside})
+				out = append(out, Segment{keep, f.inside})
 			}
 			f.pending = input[len(input)-n:]
 		} else {
-			out = append(out, segment{input, f.inside})
+			out = append(out, Segment{input, f.inside})
 		}
 		input = ""
 	}
@@ -76,11 +80,12 @@ func (f *thinkFilter) process(chunk string) []segment {
 }
 
 // flush gives the text held back waiting for a tag to complete.
-func (f *thinkFilter) flush() []segment {
+// Flush gives what is still held back at the end of the stream.
+func (f *Filter) Flush() []Segment {
 	if f.pending == "" {
 		return nil
 	}
-	s := []segment{{f.pending, f.inside}}
+	s := []Segment{{f.pending, f.inside}}
 	f.pending = ""
 	return s
 }
@@ -97,7 +102,7 @@ func longestTagSuffix(s, tag string) int {
 }
 
 // stripThink is (reasoning, content) of a complete string.
-func stripThink(s string) (reasoning, content string) {
+func Strip(s string) (reasoning, content string) {
 	if t := trimLeftSpace(s); strings.HasPrefix(t, thinkClose) {
 		s = t[len(thinkClose):]
 	}

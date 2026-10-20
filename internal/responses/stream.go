@@ -7,7 +7,9 @@ import (
 
 	"codelink/internal/apierr"
 	"codelink/internal/httpx"
+	"codelink/internal/ids"
 	"codelink/internal/jsonx"
+	"codelink/internal/thinktag"
 	"codelink/internal/upstream"
 )
 
@@ -74,7 +76,7 @@ type translator struct {
 	finishReason string
 	usage        *usage
 	usageSum     usage
-	think        thinkFilter
+	think        thinktag.Filter
 	roundClosed  bool
 	jsonBuffer   string
 	roundText    string
@@ -85,7 +87,7 @@ type translator struct {
 
 func newTranslator(sink *httpx.Stream, model string, reg *registry, jsonMode, searchMode bool) *translator {
 	return &translator{sink: sink, model: model, reg: reg, jsonMode: jsonMode, searchMode: searchMode,
-		responseID: newID("resp_"), createdAt: time.Now().Unix(), tools: map[int]*streamCall{}}
+		responseID: ids.New("resp_"), createdAt: time.Now().Unix(), tools: map[int]*streamCall{}}
 }
 
 // status is the request's status for the activity log.
@@ -164,7 +166,7 @@ func (t *translator) line(line string) lineResult {
 		t.reasoningText(r)
 	}
 	if c := jsonx.Str(jsonx.Get(delta, "content")); c != "" {
-		t.segments(t.think.process(c))
+		t.segments(t.think.Process(c))
 	}
 	for _, tc := range jsonx.Arr(jsonx.Get(delta, "tool_calls")) {
 		t.toolDelta(tc)
@@ -175,12 +177,12 @@ func (t *translator) line(line string) lineResult {
 	return lineMore
 }
 
-func (t *translator) segments(segs []segment) {
+func (t *translator) segments(segs []thinktag.Segment) {
 	for _, s := range segs {
-		if s.reasoning {
-			t.reasoningText(s.text)
+		if s.Reasoning {
+			t.reasoningText(s.Text)
 		} else {
-			t.contentText(s.text)
+			t.contentText(s.Text)
 		}
 	}
 }
@@ -211,7 +213,7 @@ func (t *translator) pump(resp *upstream.Response) bool {
 func (t *translator) reasoningText(s string) {
 	t.closeMessage()
 	if t.reasoning == nil {
-		t.reasoning = &openItem{id: newID("rs_"), index: t.allocate()}
+		t.reasoning = &openItem{id: ids.New("rs_"), index: t.allocate()}
 		t.emit("response.output_item.added", map[string]any{
 			"item":         map[string]any{"id": t.reasoning.id, "type": "reasoning", "summary": []any{}, "content": []any{}},
 			"output_index": t.reasoning.index})
@@ -250,7 +252,7 @@ func (t *translator) contentText(s string) {
 func (t *translator) emitText(s string) {
 	t.closeReasoning()
 	if t.message == nil {
-		t.message = &openItem{id: newID("msg_"), index: t.allocate()}
+		t.message = &openItem{id: ids.New("msg_"), index: t.allocate()}
 		t.emit("response.output_item.added", map[string]any{
 			"item":         map[string]any{"id": t.message.id, "type": "message", "role": "assistant", "status": "in_progress", "content": []any{}},
 			"output_index": t.message.index})
@@ -349,10 +351,10 @@ func (t *translator) toolDelta(tc any) {
 		t.closeMessage()
 		callID := id
 		if callID == "" {
-			callID = newID("call_")
+			callID = ids.New("call_")
 		}
 		held := t.searchMode && name == webSearchFunction
-		c = &streamCall{itemID: newID("fc_"), callID: callID, name: name, custom: t.reg.isCustom(name), held: held, outputIndex: -1}
+		c = &streamCall{itemID: ids.New("fc_"), callID: callID, name: name, custom: t.reg.isCustom(name), held: held, outputIndex: -1}
 		t.tools[index] = c
 		if held {
 			t.held = append(t.held, c)
@@ -413,7 +415,7 @@ func (t *translator) finishRound() {
 	}
 	t.roundClosed = true
 	t.start()
-	t.segments(t.think.flush())
+	t.segments(t.think.Flush())
 	t.flushJSON(len(t.toolOrder) == 0)
 	t.closeReasoning()
 	t.closeMessage()
@@ -485,7 +487,7 @@ func (t *translator) nextRound() {
 	t.toolOrder, t.held = nil, nil
 	t.finishReason, t.usage = "", nil
 	t.roundClosed = false
-	t.think = thinkFilter{}
+	t.think = thinktag.Filter{}
 	t.roundText, t.roundReason = "", ""
 }
 
@@ -494,7 +496,7 @@ func (t *translator) nextRound() {
 func (t *translator) webSearch(o searchOutcome) {
 	t.start()
 	index := t.allocate()
-	id := newID("ws_")
+	id := ids.New("ws_")
 	action := map[string]any{"type": "search", "query": o.query}
 	t.emit("response.output_item.added", map[string]any{
 		"item": map[string]any{"id": id, "type": "web_search_call", "status": "in_progress", "action": action}, "output_index": index})

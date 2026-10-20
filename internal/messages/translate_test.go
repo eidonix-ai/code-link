@@ -10,6 +10,7 @@ import (
 	"codelink/internal/jsonx"
 	"codelink/internal/media"
 	"codelink/internal/testkit"
+	"codelink/internal/thinktag"
 )
 
 var glm = config.Model{ID: "GLM", BackendID: "b", Upstream: "glm"}
@@ -395,25 +396,25 @@ func TestStopReasonMapping(t *testing.T) {
 }
 
 func TestLoneLeadingCloseThinkStripped(t *testing.T) {
-	_, content := stripThink("\n</think>\n\n<severity>12")
+	_, content := thinktag.Strip("\n</think>\n\n<severity>12")
 	eq(t, content, "<severity>12", "content")
-	r, _ := stripThink("a<think>b")
+	r, _ := thinktag.Strip("a<think>b")
 	eq(t, r, "b", "reasoning")
 }
 
 // MARK: think tags
 
-func runThink(chunks ...string) []segment {
-	var f thinkFilter
-	var out []segment
+func runThink(chunks ...string) []thinktag.Segment {
+	var f thinktag.Filter
+	var out []thinktag.Segment
 	for _, c := range chunks {
-		out = append(out, f.process(c)...)
+		out = append(out, f.Process(c)...)
 	}
-	out = append(out, f.flush()...)
-	var merged []segment
+	out = append(out, f.Flush()...)
+	var merged []thinktag.Segment
 	for _, s := range out {
-		if n := len(merged); n > 0 && merged[n-1].reasoning == s.reasoning {
-			merged[n-1].text += s.text
+		if n := len(merged); n > 0 && merged[n-1].Reasoning == s.Reasoning {
+			merged[n-1].Text += s.Text
 		} else {
 			merged = append(merged, s)
 		}
@@ -422,15 +423,15 @@ func runThink(chunks ...string) []segment {
 }
 
 func TestThinkTagsSplitAcrossChunks(t *testing.T) {
-	eq(t, runThink("<th", "ink>reason", "ing</thi", "nk>answer"), []segment{{"reasoning", true}, {"answer", false}}, "split")
-	eq(t, runThink("a <", "b"), []segment{{"a <b", false}}, "lone <")
-	eq(t, runThink("x<think>y"), []segment{{"x", false}, {"y", true}}, "unclosed")
+	eq(t, runThink("<th", "ink>reason", "ing</thi", "nk>answer"), []thinktag.Segment{{Text: "reasoning", Reasoning: true}, {Text: "answer", Reasoning: false}}, "split")
+	eq(t, runThink("a <", "b"), []thinktag.Segment{{Text: "a <b", Reasoning: false}}, "lone <")
+	eq(t, runThink("x<think>y"), []thinktag.Segment{{Text: "x", Reasoning: false}, {Text: "y", Reasoning: true}}, "unclosed")
 }
 
 func TestThinkLoneLeadingCloseDropped(t *testing.T) {
-	eq(t, runThink("</think>", "\n\nanswer"), []segment{{"\n\nanswer", false}}, "close")
-	eq(t, runThink("</th", "ink>yes"), []segment{{"yes", false}}, "split close")
-	eq(t, runThink("ok </think> later"), []segment{{"ok </think> later", false}}, "not leading")
+	eq(t, runThink("</think>", "\n\nanswer"), []thinktag.Segment{{Text: "\n\nanswer", Reasoning: false}}, "close")
+	eq(t, runThink("</th", "ink>yes"), []thinktag.Segment{{Text: "yes", Reasoning: false}}, "split close")
+	eq(t, runThink("ok </think> later"), []thinktag.Segment{{Text: "ok </think> later", Reasoning: false}}, "not leading")
 }
 
 // MARK: estimate

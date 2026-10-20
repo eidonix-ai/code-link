@@ -1,22 +1,12 @@
 package responses
 
 import (
-	"math/rand/v2"
 	"time"
 
+	"codelink/internal/ids"
 	"codelink/internal/jsonx"
+	"codelink/internal/thinktag"
 )
-
-const idAlphabet = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
-
-// newID is prefix + 24 random alphanumerics.
-func newID(prefix string) string {
-	b := make([]byte, 24)
-	for i := range b {
-		b[i] = idAlphabet[rand.IntN(len(idAlphabet))]
-	}
-	return prefix + string(b)
-}
 
 // usage is a Chat Completions usage.
 type usage struct {
@@ -95,7 +85,7 @@ func roundOf(chat any, reg *registry, jsonMode, searchMode bool) (round, bool) {
 	}
 	text := ""
 	if c := jsonx.Str(jsonx.Get(msg, "content")); c != "" {
-		think, rest := stripThink(c)
+		think, rest := thinktag.Strip(c)
 		text = rest
 		if reasoning == "" {
 			reasoning = think
@@ -106,11 +96,11 @@ func roundOf(chat any, reg *registry, jsonMode, searchMode bool) (round, bool) {
 		text = cleanStructuredOutput(text)
 	}
 	if reasoning != "" {
-		r.items = append(r.items, reasoningItem(newID("rs_"), reasoning))
+		r.items = append(r.items, reasoningItem(ids.New("rs_"), reasoning))
 	}
 	if text != "" {
 		r.text = text
-		r.items = append(r.items, map[string]any{"id": newID("msg_"), "type": "message", "role": "assistant", "status": "completed",
+		r.items = append(r.items, map[string]any{"id": ids.New("msg_"), "type": "message", "role": "assistant", "status": "completed",
 			"content": []any{map[string]any{"type": "output_text", "text": text, "annotations": []any{}}}})
 	}
 	for _, tc := range calls {
@@ -118,7 +108,7 @@ func roundOf(chat any, reg *registry, jsonMode, searchMode bool) (round, bool) {
 		args := jsonx.Str(jsonx.Get(tc, "function", "arguments"))
 		id := jsonx.Str(jsonx.Get(tc, "id"))
 		if id == "" {
-			id = newID("call_")
+			id = ids.New("call_")
 		}
 		if searchMode && name == webSearchFunction {
 			r.searchCalls = append(r.searchCalls, searchCall{id, args})
@@ -127,7 +117,7 @@ func roundOf(chat any, reg *registry, jsonMode, searchMode bool) (round, bool) {
 		if args == "" {
 			args = "{}"
 		}
-		r.items = append(r.items, reg.outputItem(newID("fc_"), id, name, args, false))
+		r.items = append(r.items, reg.outputItem(ids.New("fc_"), id, name, args, false))
 	}
 	return r, true
 }
@@ -171,7 +161,7 @@ func responseObject(model string, items []any, text, finishReason string, u usag
 	if items == nil {
 		items = []any{}
 	}
-	return map[string]any{"id": newID("resp_"), "object": "response", "created_at": time.Now().Unix(),
+	return map[string]any{"id": ids.New("resp_"), "object": "response", "created_at": time.Now().Unix(),
 		"model": model, "status": status, "error": errObj, "incomplete_details": incomplete,
 		"output": items, "output_text": text, "usage": u.responses()}
 }

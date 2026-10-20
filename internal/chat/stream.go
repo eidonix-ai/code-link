@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"codelink/internal/apierr"
+	"codelink/internal/ids"
 	"codelink/internal/jsonx"
 )
 
@@ -32,7 +33,7 @@ type anthropicStream struct {
 }
 
 func newAnthropicStream(raw func([]byte), model string, includeUsage bool) *anthropicStream {
-	return &anthropicStream{raw: raw, model: model, includeUsage: includeUsage, id: newID("chatcmpl-"),
+	return &anthropicStream{raw: raw, model: model, includeUsage: includeUsage, id: ids.New("chatcmpl-"),
 		created: time.Now().Unix(), finishReason: "stop", inputUsage: map[string]any{}, toolIndex: map[int]int{}}
 }
 

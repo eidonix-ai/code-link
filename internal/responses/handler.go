@@ -14,6 +14,7 @@ import (
 	"codelink/internal/core"
 	"codelink/internal/hooks"
 	"codelink/internal/httpx"
+	"codelink/internal/ids"
 	"codelink/internal/jsonx"
 	"codelink/internal/media"
 	"codelink/internal/routing"
@@ -432,7 +433,7 @@ func (l *searchLoop) blocking(first *upstream.Response) (map[string]any, *apierr
 		}
 		outcomes := runner.answer(c.ctx, rd.searchCalls)
 		for _, o := range outcomes {
-			items = append(items, webSearchItem(newID("ws_"), o))
+			items = append(items, webSearchItem(ids.New("ws_"), o))
 		}
 		clientCalls := false
 		for _, it := range rd.items {

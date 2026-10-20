@@ -10,6 +10,7 @@ import (
 	"codelink/internal/apierr"
 	"codelink/internal/hooks"
 	"codelink/internal/httpx"
+	"codelink/internal/ids"
 	"codelink/internal/jsonx"
 	"codelink/internal/upstream"
 )
@@ -158,7 +159,7 @@ func (r *searchRunner) answer(ctx context.Context, calls []searchCall) []searchO
 	var out []searchOutcome
 	for _, c := range calls {
 		query := strings.TrimSpace(jsonx.Str(jsonx.Get(jsonx.ParseObject([]byte(c.args)), "query")))
-		o := searchOutcome{id: newID("srvtoolu_"), callID: c.id, query: query}
+		o := searchOutcome{id: ids.New("srvtoolu_"), callID: c.id, query: query}
 		switch {
 		case query == "":
 			o.errorCode = searchInvalidInput

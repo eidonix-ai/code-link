@@ -1,4 +1,5 @@
-package messages
+// Package ids makes the random ids responses carry.
+package ids
 
 import (
 	"crypto/rand"
@@ -7,8 +8,8 @@ import (
 
 const idAlphabet = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
-// newID is prefix + 24 random alphanumerics ("msg_…", "toolu_…", "srvtoolu_…").
-func newID(prefix string) string {
+// New is prefix + 24 random alphanumerics ("msg_…", "toolu_…", "srvtoolu_…").
+func New(prefix string) string {
 	b := make([]byte, 24)
 	n := big.NewInt(int64(len(idAlphabet)))
 	for i := range b {

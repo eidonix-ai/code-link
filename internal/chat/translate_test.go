@@ -1,6 +1,9 @@
 package chat
 
-import "testing"
+import (
+	"codelink/internal/media"
+	"testing"
+)
 
 // The finish_reason table from ChatCompletionsTests.anthropicMessageBecomesAChatCompletion.
 func TestFinishReason(t *testing.T) {
@@ -24,7 +27,7 @@ func TestDataURL(t *testing.T) {
 		{"https://x/y.png", "", "", false},
 	}
 	for _, c := range cases {
-		mt, d, ok := dataURL(c.in)
+		mt, d, ok := media.DataURL(c.in)
 		if ok != c.ok || (ok && (mt != c.mediaType || d != c.data)) {
 			t.Errorf("%s: %q %q %v", c.in, mt, d, ok)
 		}

@@ -3,7 +3,9 @@ package messages
 import (
 	"slices"
 
+	"codelink/internal/ids"
 	"codelink/internal/jsonx"
+	"codelink/internal/thinktag"
 )
 
 // signature is the thinking block signature code-link gives.
@@ -91,7 +93,7 @@ func translateMessage(chat any, model string, stopSequences []string) obj {
 		content = append(content, obj{"type": "thinking", "thinking": reasoning, "signature": signature})
 	}
 	if c := jsonx.Str(jsonx.Get(msg, "content")); c != "" {
-		think, text := stripThink(c)
+		think, text := thinktag.Strip(c)
 		if think != "" && reasoning == "" {
 			content = append(content, obj{"type": "thinking", "thinking": think, "signature": signature})
 		}
@@ -109,7 +111,7 @@ func translateMessage(chat any, model string, stopSequences []string) obj {
 		}
 		id := jsonx.Str(jsonx.Get(tc, "id"))
 		if id == "" {
-			id = newID("toolu_")
+			id = ids.New("toolu_")
 		}
 		name := jsonx.Get(tc, "function", "name")
 		if name == nil {
@@ -119,6 +121,6 @@ func translateMessage(chat any, model string, stopSequences []string) obj {
 	}
 	stop, seq := resolveStopReason(jsonx.Str(choice["finish_reason"]), jsonx.Str(choice["stop_reason"]), stopSequences, len(calls) > 0)
 	u, _ := parseUsage(jsonx.Get(chat, "usage"))
-	return obj{"id": newID("msg_"), "type": "message", "role": "assistant", "content": content,
+	return obj{"id": ids.New("msg_"), "type": "message", "role": "assistant", "content": content,
 		"model": model, "stop_reason": stop, "stop_sequence": orNull(seq), "usage": u.anthropic(-1)}
 }
