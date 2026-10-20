@@ -38,8 +38,8 @@ Needs Go 1.27, Node 20+ and the Wails 3 CLI
 
 ```
 scripts/build.sh            # frontend, then the macOS app and the Windows exe
-scripts/build.sh mac        # bin/code-link.app (arm64) + bin/code-link-<version>-macos-arm64.zip
-scripts/build.sh windows    # bin/code-link.exe (amd64) + bin/code-link-<version>-windows-amd64.zip
+scripts/build.sh mac        # bin/code-link.app (arm64) + bin/code-link-<version>-macos-arm64.dmg (download) and .zip (update file)
+scripts/build.sh windows    # bin/code-link.exe (amd64) + the same as bin/code-link-<version>-windows-amd64.exe
 scripts/build.sh frontend   # regenerate bindings and rebuild frontend/dist only
 scripts/build.sh icons      # redraw build/appicon.png and regenerate the .icns / .ico
 ```
@@ -47,12 +47,37 @@ scripts/build.sh icons      # redraw build/appicon.png and regenerate the .icns 
 The macOS app is built on a Mac (cgo) and signed with the "Apple Development"
 identity (team 342KG4SM2D) when it is in the keychain, ad hoc otherwise
 (`SIGN_IDENTITY=-` forces ad hoc). The Windows exe cross-compiles from any OS
-(no cgo); it is a single portable file — users unzip it and run it, choosing
+(no cgo); it is a single portable file — users download it and run it, choosing
 "More info → Run anyway" the first time, since it isn't code-signed. It needs
 the WebView2 runtime, which Windows 10 and 11 have.
 
-`VERSION` (default 0.1.0) and `BUNDLE_ID` (default `com.eidonix.code-link-go`,
-so it runs beside the Swift app) are environment variables of the script.
+`VERSION` (default 0.2.0, stamped into the app with `-X main.version`) and
+`BUNDLE_ID` (default `com.eidonix.code-link-go`, so it runs beside the Swift
+app) are environment variables of the script; a plain `go build` reports
+version "dev" and doesn't update itself.
+
+## Updates and publishing
+
+code-link updates itself (`internal/selfupdate`): it checks
+`https://codelink.eidonix.com/update/manifest.json` and its detached Ed25519
+signature `manifest.json.sig` at start and every 6 hours, and the tray offers
+"Update code-link to x.y.z…" when a newer version is out. The format and the
+replace-and-restart steps are described in the package. The public key is
+embedded from `internal/selfupdate/update-public-key.txt`; the private key is
+`~/.code-link/update-signing.key` on the publishing Mac. Make them once, from
+the repository root, and commit the public key:
+
+```
+GOWORK=off go run ./cmd/updatekeys keygen
+```
+
+`scripts/publish.sh` uploads the site, the downloads
+(`files/code-link-macos-arm64.dmg`, `files/code-link-windows-amd64.exe` and
+versioned copies), the update files and the signed manifest; it refuses to
+publish without the key, or builds that don't embed it. `NOTES="…"` sets the
+release notes (default: the last commit's subject). To try an update against
+another feed, run the app with `CODE_LINK_UPDATE_URL` set to its manifest
+(it must still be signed with the key).
 
 Tests and checks (no frontend build needed: `frontend/dist/.keep` satisfies
 the embed):

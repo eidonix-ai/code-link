@@ -4,6 +4,7 @@ import * as Settings from "../../bindings/codelink/internal/gui/settings.js";
 import * as AppEvents from "../../bindings/events/index.js";
 import type { Config } from "../../bindings/codelink/internal/config/models.js";
 import type { Entry, JobView, Status } from "../../bindings/codelink/internal/app/models.js";
+import type { State as UpdateState } from "../../bindings/codelink/internal/selfupdate/models.js";
 
 export { Settings };
 export type { Config, Backend, Model } from "../../bindings/codelink/internal/config/models.js";
@@ -15,6 +16,8 @@ export { MenuAction } from "../../bindings/codelink/internal/app/models.js";
 export { Tool } from "../../bindings/codelink/internal/launch/models.js";
 export type { Probe, ProbedModel } from "../../bindings/codelink/internal/core/models.js";
 export type { Snapshot } from "../../bindings/codelink/internal/gui/models.js";
+export type { State as UpdateState, Job as UpdateJob } from "../../bindings/codelink/internal/selfupdate/models.js";
+export { Phase } from "../../bindings/codelink/internal/selfupdate/models.js";
 
 export function onStatus(f: (s: Status) => void) {
   return Events.On(AppEvents.Status, (e) => f(e.data as Status));
@@ -34,6 +37,11 @@ export function onLaunchOpen(f: (tool: string) => void) {
 
 export function onJob(f: (j: JobView) => void) {
   return Events.On(AppEvents.Job, (e) => f(e.data as JobView));
+}
+
+/** code-link's own update: checks and progress. */
+export function onUpdate(f: (s: UpdateState) => void) {
+  return Events.On(AppEvents.Update, (e) => f(e.data as UpdateState));
 }
 
 export function onTools(f: () => void) {

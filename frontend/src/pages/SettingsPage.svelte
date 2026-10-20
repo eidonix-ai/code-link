@@ -9,6 +9,7 @@
   import WebSearch from "../components/WebSearch.svelte";
   import Launch from "../components/Launch.svelte";
   import Activity from "../components/Activity.svelte";
+  import About from "../components/About.svelte";
   import Share from "../components/Share.svelte";
   import GetStarted from "../components/GetStarted.svelte";
   import KeysNeeded from "../components/KeysNeeded.svelte";
@@ -55,6 +56,7 @@
         <More />
         <Share />
         <Activity />
+        <About />
       {/if}
     </main>
     <Footer />

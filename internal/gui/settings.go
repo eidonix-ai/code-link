@@ -12,6 +12,7 @@ import (
 	"codelink/internal/core"
 	"codelink/internal/hooks"
 	"codelink/internal/launch"
+	"codelink/internal/selfupdate"
 	"codelink/internal/share"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
@@ -269,6 +270,23 @@ func (s *Settings) Import() (*app.ImportPreview, error) {
 func (s *Settings) ImportInto(draft config.Config, data string) (app.ImportResult, error) {
 	return s.app.ImportInto(draft, []byte(data))
 }
+
+// Update is code-link's own version and update state.
+func (s *Settings) Update() selfupdate.State { return s.gui.updater.State() }
+
+// CheckForUpdates checks for a newer code-link now.
+func (s *Settings) CheckForUpdates(ctx context.Context) selfupdate.State {
+	return s.gui.updater.Check(ctx)
+}
+
+// StartUpdate installs the newer code-link, showing its progress window.
+func (s *Settings) StartUpdate() selfupdate.State { return s.gui.OpenUpdate() }
+
+// CancelUpdate stops an update that is still downloading.
+func (s *Settings) CancelUpdate() { s.gui.updater.Cancel() }
+
+// CloseUpdate hides the update's progress window.
+func (s *Settings) CloseUpdate() { s.gui.updateWin.Hide() }
 
 // Close hides the Settings window.
 func (s *Settings) Close() { s.gui.settings.Hide() }

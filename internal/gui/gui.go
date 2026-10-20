@@ -5,6 +5,7 @@ package gui
 import (
 	"context"
 	"io/fs"
+	"os"
 	"runtime"
 	"strings"
 	"sync"
@@ -16,6 +17,7 @@ import (
 	"codelink/internal/app"
 	"codelink/internal/gui/trayicon"
 	"codelink/internal/launch"
+	"codelink/internal/selfupdate"
 )
 
 // Event names the pages listen to.
@@ -29,6 +31,8 @@ const (
 	EventJob = "job"
 	// EventTools: the tools' installs or the settings changed.
 	EventTools = "tools"
+	// EventUpdate is code-link's own update state (checks and progress).
+	EventUpdate = "update"
 )
 
 func init() {
@@ -38,6 +42,7 @@ func init() {
 	application.RegisterEvent[string](EventLaunchOpen)
 	application.RegisterEvent[app.JobView](EventJob)
 	application.RegisterEvent[string](EventTools)
+	application.RegisterEvent[selfupdate.State](EventUpdate)
 }
 
 // GUI is the running shell.
@@ -49,6 +54,9 @@ type GUI struct {
 	settings *application.WebviewWindow
 	launch   map[launch.Tool]*application.WebviewWindow
 	install  map[launch.Tool]*application.WebviewWindow
+	// updater keeps code-link itself up to date; updateWin shows its progress.
+	updater   *selfupdate.Updater
+	updateWin *application.WebviewWindow
 
 	mu       sync.Mutex
 	menuSig  string
@@ -62,9 +70,17 @@ const UniqueID = "com.eidonix.code-link"
 // re-checked for updates.
 const ToolCheckInterval = 6 * time.Hour
 
-// Run shows the tray and runs until Quit. assets is the built frontend.
-func Run(a *app.App, assets fs.FS) error {
+// Run shows the tray and runs until Quit. assets is the built frontend;
+// version is the build's ("dev" for a development build).
+func Run(a *app.App, assets fs.FS, version string) error {
 	g := &GUI{app: a, launch: map[launch.Tool]*application.WebviewWindow{}, install: map[launch.Tool]*application.WebviewWindow{}}
+	// CODE_LINK_UPDATE_URL points at another (still signed) feed, for testing.
+	g.updater = selfupdate.New(selfupdate.Options{Current: version, ManifestURL: os.Getenv("CODE_LINK_UPDATE_URL"), OnChange: func() {
+		if g.wails != nil && g.tray != nil {
+			g.updateTray(false)
+			g.wails.Event.Emit(EventUpdate, g.updater.State())
+		}
+	}})
 	g.wails = application.New(application.Options{
 		Name:        "code-link",
 		Description: "Claude Code and Codex on your own models",
@@ -99,6 +115,7 @@ func Run(a *app.App, assets fs.FS) error {
 		g.launch[t] = g.window("launch-"+string(t), "Launch "+t.DisplayName(), "/#/launch/"+string(t), 480, h)
 		g.install[t] = g.window("install-"+string(t), t.DisplayName(), "/#/install/"+string(t), 480, 380)
 	}
+	g.updateWin = g.window("update", "Update code-link", "/#/update", 440, 330)
 
 	g.menu = application.NewMenu()
 	g.tray = g.wails.SystemTray.New()
@@ -135,6 +152,11 @@ func Run(a *app.App, assets fs.FS) error {
 			a.WatchTools(ctx, ToolCheckInterval)
 		}()
 		go a.Watch(ctx, 20*time.Second)
+		go func() {
+			// The only instance now: remove what an update left behind.
+			selfupdate.CleanupRunning()
+			g.updater.Watch(ctx)
+		}()
 	})
 	g.wails.OnShutdown(a.Stop)
 	return g.wails.Run()
@@ -190,6 +212,29 @@ func (g *GUI) OpenInstall(t launch.Tool, verb app.MenuAction) app.JobView {
 	return v
 }
 
+// OpenUpdate starts installing code-link's update and shows its progress;
+// after an update that couldn't restart it quits instead, so reopening
+// finishes it.
+func (g *GUI) OpenUpdate() selfupdate.State {
+	st := g.updater.State()
+	if st.RestartNeeded {
+		g.wails.Quit()
+		return st
+	}
+	if !st.Job.Running {
+		st = g.updater.Start(func() {
+			// The new copy waits for this one to exit; let the window say
+			// "Restarting…" for a moment first.
+			time.Sleep(700 * time.Millisecond)
+			g.wails.Quit()
+		})
+	}
+	g.wails.Event.Emit(EventUpdate, st)
+	g.updateWin.Show()
+	g.updateWin.Focus()
+	return st
+}
+
 // title is a menu label in the platform's case: Title Case on macOS,
 // sentence case on Windows.
 func title(mac, win string) string {
@@ -212,7 +257,8 @@ func (g *GUI) updateTray(force bool) {
 			upkeep = append(upkeep, *m)
 		}
 	}
-	sig := st.Line
+	self := selfupdate.MenuLabel(g.updater.State())
+	sig := st.Line + "|" + self
 	for _, i := range append(append([]app.MenuItem{}, launches...), upkeep...) {
 		sig += "|" + i.Label
 	}
@@ -243,10 +289,13 @@ func (g *GUI) updateTray(force bool) {
 	for _, it := range launches {
 		m.Add(it.Label).OnClick(func(*application.Context) { g.OpenLaunch(it.Tool) })
 	}
-	if len(upkeep) > 0 {
+	if len(upkeep) > 0 || self != "" {
 		m.AddSeparator()
 		for _, it := range upkeep {
 			m.Add(it.Label).OnClick(func(*application.Context) { g.OpenInstall(it.Tool, it.Action) })
+		}
+		if self != "" {
+			m.Add(self).OnClick(func(*application.Context) { g.OpenUpdate() })
 		}
 	}
 	m.AddSeparator()
