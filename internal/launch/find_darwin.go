@@ -37,3 +37,6 @@ func lastLine(s string) string {
 	lines := strings.Split(strings.TrimSpace(s), "\n")
 	return strings.TrimSpace(lines[len(lines)-1])
 }
+
+// FreshPath is this process's PATH (the login shell's is looked up per command).
+func FreshPath() string { return os.Getenv("PATH") }

@@ -4,6 +4,7 @@ package launch
 
 import (
 	"os"
+	"strings"
 
 	"golang.org/x/sys/windows/registry"
 )
@@ -20,6 +21,21 @@ func Find(t Tool) (Found, bool) {
 		registryPath(registry.LOCAL_MACHINE, `SYSTEM\CurrentControlSet\Control\Session Manager\Environment`)}
 	return Search(t, SearchEnv{GOOS: "windows", Paths: paths, Home: home,
 		AppData: os.Getenv("APPDATA"), LocalAppData: os.Getenv("LOCALAPPDATA"), Exists: regularFile})
+}
+
+// FreshPath is PATH as a new terminal gets it: this process's, then the
+// user's and the machine's from the registry (changed by installs after
+// code-link started).
+func FreshPath() string {
+	var parts []string
+	for _, p := range []string{os.Getenv("PATH"),
+		registryPath(registry.CURRENT_USER, `Environment`),
+		registryPath(registry.LOCAL_MACHINE, `SYSTEM\CurrentControlSet\Control\Session Manager\Environment`)} {
+		if p = strings.Trim(p, ";"); p != "" {
+			parts = append(parts, p)
+		}
+	}
+	return strings.Join(parts, ";")
 }
 
 func registryPath(root registry.Key, path string) string {

@@ -531,3 +531,34 @@ func TestToolNames(t *testing.T) {
 		t.Error("install links")
 	}
 }
+
+func TestFindsCodexWhereCodeLinkAndOpenAIInstallIt(t *testing.T) {
+	win := SearchEnv{GOOS: "windows", Home: `C:\Users\A B`, LocalAppData: `C:\Users\A B\AppData\Local`}
+	if d := CodexDir(win); d != `C:\Users\A B\AppData\Local\Programs\code-link\codex` {
+		t.Errorf("windows dir %q", d)
+	}
+	ours := `C:\Users\A B\AppData\Local\Programs\code-link\codex\current\bin\codex.exe`
+	openai := `C:\Users\A B\AppData\Local\Programs\OpenAI\Codex\bin\codex.exe`
+	win.Exists = set(ours, openai)
+	if f, ok := Search(Codex, win); !ok || f.Path != ours || f.PathDir != `C:\Users\A B\AppData\Local\Programs\code-link\codex\current\bin` {
+		t.Errorf("code-link's: %+v", f)
+	}
+	win.Exists = set(openai)
+	if f, ok := Search(Codex, win); !ok || f.Path != openai {
+		t.Errorf("OpenAI's: %+v", f)
+	}
+	for _, c := range Candidates(ClaudeCode, win) {
+		if strings.Contains(c, "codex") {
+			t.Errorf("Claude Code isn't in Codex's folders: %s", c)
+		}
+	}
+	mac := SearchEnv{GOOS: "darwin", Home: "/Users/d"}
+	if d := CodexDir(mac); d != "/Users/d/.local/share/code-link/codex" {
+		t.Errorf("mac dir %q", d)
+	}
+	// On macOS the command is linked from ~/.local/bin, already searched.
+	mac.Exists = set("/Users/d/.local/bin/codex")
+	if f, ok := Search(Codex, mac); !ok || f.Path != "/Users/d/.local/bin/codex" {
+		t.Errorf("mac: %+v", f)
+	}
+}
