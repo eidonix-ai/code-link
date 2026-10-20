@@ -24,7 +24,7 @@ import (
 var assets embed.FS
 
 // featuresFactory builds the feature hooks (documents, images, web search,
-// auto mode). Integration: = features.Factory.
+// auto mode).
 var featuresFactory hooks.Factory = features.Factory
 
 func main() {
