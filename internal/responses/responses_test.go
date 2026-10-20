@@ -1047,10 +1047,8 @@ func TestUnreachableBackendIs502AndSlowOneIs504(t *testing.T) {
 
 // Documents and images.
 
-const mediaSkip = "needs media port"
 
 func TestInputFilePDFsGoThroughTheDocumentReader(t *testing.T) {
-	t.Skip(mediaSkip)
 	reader := &testkit.DocReader{}
 	pdf := "JVBERi0xLjQK"
 	input := `[{"role":"user","content":[
@@ -1107,7 +1105,6 @@ func TestInputFilePDFsGoThroughTheDocumentReader(t *testing.T) {
 }
 
 func TestDocumentsWithoutAReaderAreNotedNotDropped(t *testing.T) {
-	t.Skip(mediaSkip)
 	input := `[{"role":"user","content":[{"type":"input_file","filename":"a.pdf","file_data":"data:application/pdf;base64,JVBERi0="}]}]`
 	h := run(t, okStream)
 	post(t, h, body(input, "", true, ""))
@@ -1117,7 +1114,6 @@ func TestDocumentsWithoutAReaderAreNotedNotDropped(t *testing.T) {
 }
 
 func TestImagesForAModelWithoutVisionAreDescribed(t *testing.T) {
-	t.Skip(mediaSkip)
 	png := base64.StdEncoding.EncodeToString([]byte(strings.Repeat("\x07", 64)))
 	input := `[{"role":"user","content":[{"type":"input_text","text":"what is this"},
 	   {"type":"input_image","image_url":"data:image/png;base64,` + png + `"}]},
@@ -1149,7 +1145,6 @@ func TestImagesForAModelWithoutVisionAreDescribed(t *testing.T) {
 }
 
 func TestImagesWithoutAnyVisionAreOmittedWithANote(t *testing.T) {
-	t.Skip(mediaSkip)
 	input := `[{"role":"user","content":[{"type":"input_image","image_url":"data:image/png;base64,AAAA"}]}]`
 	no := false
 	h := configure(t, func(c *config.Config) { c.Models[0].Vision = &no }, okStream)
