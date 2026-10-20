@@ -10,6 +10,11 @@ type View struct {
 	Groups   []ChoiceGroup `json:"groups"`
 	Decision string        `json:"decision"`
 	Warning  string        `json:"warning"`
+	// Search and Documents are the pickers' choices and current values.
+	Search         []Option `json:"search"`
+	SearchValue    string   `json:"searchValue"`
+	Documents      []Option `json:"documents"`
+	DocumentsValue string   `json:"documentsValue"`
 }
 
 // Describe derives the view of a draft.
@@ -21,7 +26,9 @@ func (a *App) Describe(d config.Config) View {
 	if d.Models == nil {
 		d.Models = []config.Model{}
 	}
-	return View{Draft: d, Groups: Groups(&d, probes, false), Decision: DecisionNote(&d, probes)}
+	return View{Draft: d, Groups: Groups(&d, probes, false), Decision: DecisionNote(&d, probes),
+		Search: SearchOptions(&d, probes), SearchValue: SearchChoice(&d),
+		Documents: DocumentsOptions(&d, probes), DocumentsValue: DocumentsChoice(&d)}
 }
 
 func (a *App) warn(d config.Config, w string) View {
@@ -80,4 +87,16 @@ func (a *App) EditRenameBackend(d config.Config, old, name string) View {
 func (a *App) EditRemoveBackend(d config.Config, id string) View {
 	cleared := RemoveBackend(&d, id)
 	return a.warn(d, ClearedWarning(cleared, "provider "+id+" was removed"))
+}
+
+// EditSetSearch applies the web search picker.
+func (a *App) EditSetSearch(d config.Config, value string) View {
+	SetSearchChoice(&d, value)
+	return a.Describe(d)
+}
+
+// EditSetDocuments applies the documents picker.
+func (a *App) EditSetDocuments(d config.Config, value string) View {
+	SetDocumentsChoice(&d, value)
+	return a.Describe(d)
 }

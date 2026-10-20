@@ -2,13 +2,16 @@ package gui
 
 import (
 	"context"
+	"os"
 	"runtime"
+	"strings"
 
 	"codelink/internal/app"
 	"codelink/internal/config"
 	"codelink/internal/core"
 	"codelink/internal/hooks"
 	"codelink/internal/launch"
+	"codelink/internal/share"
 )
 
 func hookError(msg string) hooks.Event { return hooks.Event{Kind: "error", Message: msg} }
@@ -28,6 +31,8 @@ type Platform struct {
 	Terminals       []launch.Choice `json:"terminals"`
 	PermissionModes []launch.Choice `json:"permissionModes"`
 	DefaultPort     int             `json:"defaultPort"`
+	// GatewayURL fills in a new Go-LLM-Proxy provider's address.
+	GatewayURL string `json:"gatewayURL"`
 }
 
 // Snapshot is everything the page needs when it opens.
@@ -40,6 +45,9 @@ type Snapshot struct {
 	LoadWarning string                `json:"loadWarning"`
 	Activity    []app.Entry           `json:"activity"`
 	Path        string                `json:"path"`
+	// GetStarted is set when only a key is missing: Settings opens on
+	// "Paste your API key".
+	GetStarted *app.KeyNeed `json:"getStarted"`
 }
 
 // Load is the saved settings with their view, the status and the platform.
@@ -50,12 +58,22 @@ func (s *Settings) Load() Snapshot {
 		View:   s.app.Describe(cfg),
 		Status: s.app.Status(),
 		Platform: Platform{OS: runtime.GOOS, Terminals: launch.TerminalChoices(runtime.GOOS),
-			PermissionModes: launch.PermissionModes, DefaultPort: config.DefaultPort},
+			PermissionModes: launch.PermissionModes, DefaultPort: config.DefaultPort, GatewayURL: config.GoLLMProxyURL},
 		Probes:      s.app.Probes(),
 		LoadWarning: s.app.LoadWarning(),
 		Activity:    s.app.Activity.Entries(),
 		Path:        s.app.Path,
+		GetStarted:  getStarted(&cfg),
 	}
+}
+
+func getStarted(c *config.Config) *app.KeyNeed {
+	b, ok := app.KeyOnlySetup(c)
+	if !ok {
+		return nil
+	}
+	n := app.Needs(c, []string{b.ID})[0]
+	return &n
 }
 
 // Status is the engine's status line.
@@ -115,6 +133,72 @@ func (s *Settings) Activity() []app.Entry { return s.app.Activity.Entries() }
 
 // ClearActivity empties it.
 func (s *Settings) ClearActivity() { s.app.Activity.Clear() }
+
+// SetSearch applies the web search picker.
+func (s *Settings) SetSearch(draft config.Config, value string) app.View {
+	return s.app.EditSetSearch(draft, value)
+}
+
+// SetDocuments applies the documents picker.
+func (s *Settings) SetDocuments(draft config.Config, value string) app.View {
+	return s.app.EditSetDocuments(draft, value)
+}
+
+// ApplyKeys puts keys on providers (testing and enabling a Go-LLM-Proxy)
+// and, with save, saves when they all work.
+func (s *Settings) ApplyKeys(ctx context.Context, draft config.Config, keys map[string]string, save bool) app.KeysResult {
+	return s.app.ApplyKeys(ctx, draft, keys, save)
+}
+
+// OpenURL opens a link (the gateway's "Get a key" page) in the browser.
+func (s *Settings) OpenURL(url string) {
+	if strings.HasPrefix(url, "https://") || strings.HasPrefix(url, "http://") {
+		s.gui.wails.Browser.OpenURL(url)
+	}
+}
+
+// Export asks where to save a .codelink file of the saved settings and
+// writes it; "" when cancelled.
+func (s *Settings) Export() (string, error) {
+	path, err := s.gui.wails.Dialog.SaveFile().
+		SetFilename("code-link settings"+share.Extension).
+		AddFilter("code-link settings", "*"+share.Extension).
+		AttachToWindow(s.gui.settings).
+		PromptForSingleSelection()
+	if err != nil || path == "" {
+		return "", err
+	}
+	if !strings.HasSuffix(strings.ToLower(path), share.Extension) {
+		path += share.Extension
+	}
+	return path, s.app.ExportTo(path)
+}
+
+// Import asks for a .codelink file and previews it; nil when cancelled.
+func (s *Settings) Import() (*app.ImportPreview, error) {
+	path, err := s.gui.wails.Dialog.OpenFile().
+		CanChooseFiles(true).
+		AddFilter("code-link settings", "*"+share.Extension).
+		AttachToWindow(s.gui.settings).
+		PromptForSingleSelection()
+	if err != nil || path == "" {
+		return nil, err
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	p, err := app.PreviewImport(data)
+	if err != nil {
+		return nil, err
+	}
+	return &p, nil
+}
+
+// ImportInto merges a previewed file into the draft.
+func (s *Settings) ImportInto(draft config.Config, data string) (app.ImportResult, error) {
+	return s.app.ImportInto(draft, []byte(data))
+}
 
 // Close hides the Settings window.
 func (s *Settings) Close() { s.gui.settings.Hide() }

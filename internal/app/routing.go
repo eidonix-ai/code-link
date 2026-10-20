@@ -251,6 +251,12 @@ func RenameBackend(c *config.Config, old, name string) bool {
 			c.Models[i].BackendID = n
 		}
 	}
+	if c.WebSearch.Via == old {
+		c.WebSearch.Via = n
+	}
+	if c.Documents.Via == old {
+		c.Documents.Via = n
+	}
 	return true
 }
 
@@ -294,6 +300,12 @@ func RemoveBackend(c *config.Config, id string) []Slot {
 		}
 	}
 	c.Models = models
+	if c.WebSearch.Via == id {
+		c.WebSearch.Via = ""
+	}
+	if c.Documents.Via == id {
+		c.Documents.Via = ""
+	}
 	return cleared
 }
 
@@ -343,10 +355,20 @@ func Problems(c *config.Config) []string {
 			}
 		}
 	}
-	if u := c.Documents.PaddleOCR; u != "" && !ValidURL(u) {
+	if u := c.Documents.PaddleOCR; u != "" && c.Documents.Via == "" && !c.Documents.LocalOnly && !ValidURL(u) {
 		out = append(out, "The PaddleOCR URL must be http:// or https://.")
 	}
-	if c.WebSearch.Provider != "" && strings.TrimSpace(c.WebSearch.APIKey) == "" {
+	for _, via := range []struct{ id, what string }{{c.WebSearch.Via, "Web search"}, {c.Documents.Via, "Documents"}} {
+		if via.id == "" {
+			continue
+		}
+		if b, ok := c.Backend(via.id); !ok {
+			out = append(out, fmt.Sprintf("%s goes through %s, which isn't a provider any more.", via.what, via.id))
+		} else if strings.TrimSpace(b.APIKey) == "" {
+			out = append(out, fmt.Sprintf("%s goes through %s, which has no API key.", via.what, via.id))
+		}
+	}
+	if !c.WebSearch.Off && c.WebSearch.Via == "" && c.WebSearch.Provider != "" && strings.TrimSpace(c.WebSearch.APIKey) == "" {
 		out = append(out, "Web search needs an API key (or turn it off).")
 	}
 	return out

@@ -62,7 +62,7 @@ func searcher(cfg *config.Config, d deps) hooks.WebSearcher {
 	}
 	key := strings.TrimSpace(ws.APIKey)
 	switch {
-	case key == "":
+	case key == "", ws.Off:
 		return websearch.Unavailable{}
 	case ws.Provider == config.Tavily:
 		return &websearch.Tavily{Key: key, Client: d.client, Endpoint: d.tavilyURL}

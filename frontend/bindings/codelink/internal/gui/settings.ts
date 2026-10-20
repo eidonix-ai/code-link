@@ -42,6 +42,14 @@ export function AddProvider(draft: config$0.Config): $CancellablePromise<app$0.V
 }
 
 /**
+ * ApplyKeys puts keys on providers (testing and enabling a Go-LLM-Proxy)
+ * and, with save, saves when they all work.
+ */
+export function ApplyKeys(draft: config$0.Config, keys: { [_ in string]?: string } | null, save: boolean): $CancellablePromise<app$0.KeysResult> {
+    return $Call.ByID(2051163025, draft, keys, save);
+}
+
+/**
  * ClearActivity empties it.
  */
 export function ClearActivity(): $CancellablePromise<void> {
@@ -63,10 +71,39 @@ export function Describe(draft: config$0.Config): $CancellablePromise<app$0.View
 }
 
 /**
+ * Export asks where to save a .codelink file of the saved settings and
+ * writes it; "" when cancelled.
+ */
+export function Export(): $CancellablePromise<string> {
+    return $Call.ByID(602455469);
+}
+
+/**
+ * Import asks for a .codelink file and previews it; nil when cancelled.
+ */
+export function Import(): $CancellablePromise<app$0.ImportPreview | null> {
+    return $Call.ByID(2374936142);
+}
+
+/**
+ * ImportInto merges a previewed file into the draft.
+ */
+export function ImportInto(draft: config$0.Config, data: string): $CancellablePromise<app$0.ImportResult> {
+    return $Call.ByID(308822288, draft, data);
+}
+
+/**
  * Load is the saved settings with their view, the status and the platform.
  */
 export function Load(): $CancellablePromise<$models.Snapshot> {
     return $Call.ByID(3518124183);
+}
+
+/**
+ * OpenURL opens a link (the gateway's "Get a key" page) in the browser.
+ */
+export function OpenURL(url: string): $CancellablePromise<void> {
+    return $Call.ByID(656640948, url);
 }
 
 /**
@@ -105,6 +142,13 @@ export function Save(draft: config$0.Config): $CancellablePromise<app$0.SaveResu
 }
 
 /**
+ * SetDocuments applies the documents picker.
+ */
+export function SetDocuments(draft: config$0.Config, value: string): $CancellablePromise<app$0.View> {
+    return $Call.ByID(3206712709, draft, value);
+}
+
+/**
  * SetEnabled ticks or unticks a provider's model.
  */
 export function SetEnabled(draft: config$0.Config, tag: string, on: boolean): $CancellablePromise<app$0.View> {
@@ -116,6 +160,13 @@ export function SetEnabled(draft: config$0.Config, tag: string, on: boolean): $C
  */
 export function SetRole(draft: config$0.Config, slot: app$0.Slot, tag: string): $CancellablePromise<app$0.View> {
     return $Call.ByID(1541928761, draft, slot, tag);
+}
+
+/**
+ * SetSearch applies the web search picker.
+ */
+export function SetSearch(draft: config$0.Config, value: string): $CancellablePromise<app$0.View> {
+    return $Call.ByID(440288201, draft, value);
 }
 
 /**

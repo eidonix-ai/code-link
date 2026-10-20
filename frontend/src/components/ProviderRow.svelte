@@ -31,6 +31,32 @@
     return "Reachable · " + parts.join(" · ");
   }
 
+  /** What a gateway offers besides chat: "web search · documents". */
+  function offers(p: Probe | undefined): string {
+    const g = p?.gateway;
+    if (!g) return "";
+    return [g.webSearch ? "web search" : "", g.documents ? "documents" : ""].filter((x) => x).join(" · ");
+  }
+
+  const localDefault = "http://localhost:8000/v1";
+
+  /** Switching to Go-LLM-Proxy fills in its address; switching away undoes that. */
+  function setKind(kind: string) {
+    const url = (backend.baseURL ?? "").trim();
+    if (kind === "gollm" && (url === "" || url === localDefault)) backend.baseURL = settings.platform.gatewayURL;
+    if (kind !== "gollm" && url === settings.platform.gatewayURL) backend.baseURL = localDefault;
+    backend.kind = kind as Backend["kind"];
+    settings.refresh();
+  }
+
+  function joinURL(base: string): string {
+    try {
+      return new URL(base).origin + "/join";
+    } catch {
+      return "";
+    }
+  }
+
   async function rename(e: Event & { currentTarget: HTMLInputElement }) {
     const input = e.currentTarget;
     const old = backend.id;
@@ -62,6 +88,7 @@
     <span class="name">{backend.id}</span>
     <span class="secondary host">{host(backend.baseURL)}</span>
     <span class="spacer"></span>
+    {#if offers(probe)}<span class="secondary">{offers(probe)}</span>{/if}
     {#if inUse > 0}<span class="secondary">{inUse} in use</span>{/if}
     <span class="chev" class:open={expanded}>›</span>
   </button>
@@ -74,8 +101,9 @@
       </label>
       <label class="field">
         <span>Kind</span>
-        <select bind:value={backend.kind}>
+        <select value={backend.kind} onchange={(e) => setKind(e.currentTarget.value)}>
           <option value="openai">OpenAI-compatible (vLLM, SGLang, Flare)</option>
+          <option value="gollm">Go-LLM-Proxy</option>
           <option value="anthropic">Anthropic</option>
         </select>
       </label>
@@ -85,15 +113,23 @@
       </label>
       <label class="field">
         <span>API key</span>
-        <input type="password" bind:value={backend.apiKey} placeholder="Optional" autocomplete="off" />
+        <input type="password" bind:value={backend.apiKey} onchange={() => settings.refresh()}
+          placeholder={backend.kind === "gollm" ? "Required" : "Optional"} autocomplete="off" />
       </label>
+      {#if backend.kind === "gollm" && !backend.apiKey && joinURL(backend.baseURL)}
+        <div class="field">
+          <span></span>
+          <div><button class="link" onclick={() => settings.openURL(joinURL(backend.baseURL))}>Get a key</button></div>
+        </div>
+      {/if}
       <div class="field">
         <span>Connection</span>
         <div class="test">
           {#if settings.probing[backend.id]}
             <span class="secondary">Testing…</span>
           {:else if probe}
-            <Note level={probe.reachable ? "ok" : "error"} text={probe.reachable ? summary(probe) : probe.error || "Unreachable"} />
+            <Note level={probe.reachable ? "ok" : "error"}
+              text={probe.reachable ? summary(probe) + (offers(probe) ? " · also " + offers(probe) : "") : probe.error || "Unreachable"} />
           {:else}
             <span class="secondary">Not tested</span>
           {/if}

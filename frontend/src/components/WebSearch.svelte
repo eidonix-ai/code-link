@@ -7,6 +7,7 @@
 
   let result = $state<CheckResult | null>(null);
   let testing = $state(false);
+  const own = $derived(settings.searchValue === "tavily" || settings.searchValue === "brave");
 
   async function test() {
     testing = true;
@@ -19,14 +20,15 @@
 </script>
 
 <Section title="Web search">
-  <Row label="Provider">
-    <select bind:value={settings.draft.webSearch.provider} onchange={() => (result = null)} aria-label="Web search provider">
-      <option value="">Off</option>
-      <option value="tavily">Tavily</option>
-      <option value="brave">Brave</option>
+  <Row label="Search">
+    <select value={settings.searchValue} aria-label="Web search"
+      onchange={(e) => { result = null; settings.setSearch(e.currentTarget.value); }}>
+      {#each settings.searchOptions as o (o.value)}
+        <option value={o.value}>{o.label}</option>
+      {/each}
     </select>
   </Row>
-  {#if settings.draft.webSearch.provider}
+  {#if own}
     <div>
       <Row label="API key" wide>
         <input type="password" bind:value={settings.draft.webSearch.apiKey} oninput={() => (result = null)}

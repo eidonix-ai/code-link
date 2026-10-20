@@ -11,6 +11,11 @@ export type {
     ChoiceGroup,
     ChoiceItem,
     Entry,
+    ImportPreview,
+    ImportResult,
+    KeyNeed,
+    KeysResult,
+    Option,
     SaveResult,
     Status,
     View

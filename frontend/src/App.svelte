@@ -8,6 +8,10 @@
   import WebSearch from "./components/WebSearch.svelte";
   import Launch from "./components/Launch.svelte";
   import Activity from "./components/Activity.svelte";
+  import Share from "./components/Share.svelte";
+  import GetStarted from "./components/GetStarted.svelte";
+  import KeysNeeded from "./components/KeysNeeded.svelte";
+  import ImportPreview from "./components/ImportPreview.svelte";
   import Footer from "./components/Footer.svelte";
 
   onMount(() => {
@@ -28,22 +32,33 @@
 
 <svelte:window onkeydown={keydown} />
 
-<div class="page">
-  <main>
-    {#if settings.loaded}
-      {#if settings.loadWarning}
-        <div class="banner"><Note level="warn" text={settings.loadWarning} /></div>
+{#if settings.loaded && settings.getStarted}
+  <GetStarted need={settings.getStarted} />
+{:else}
+  <div class="page">
+    <main>
+      {#if settings.loaded}
+        {#if settings.loadWarning}
+          <div class="banner"><Note level="warn" text={settings.loadWarning} /></div>
+        {/if}
+        {#if settings.importPreview}
+          <ImportPreview />
+        {/if}
+        {#if settings.needs.length > 0}
+          <KeysNeeded />
+        {/if}
+        <Providers />
+        <Models />
+        <Documents />
+        <WebSearch />
+        <Launch />
+        <Share />
+        <Activity />
       {/if}
-      <Providers />
-      <Models />
-      <Documents />
-      <WebSearch />
-      <Launch />
-      <Activity />
-    {/if}
-  </main>
-  <Footer />
-</div>
+    </main>
+    <Footer />
+  </div>
+{/if}
 
 <style>
   .page {
