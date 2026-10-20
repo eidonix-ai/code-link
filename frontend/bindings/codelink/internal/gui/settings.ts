@@ -21,7 +21,7 @@ import * as app$0 from "../app/models.js";
 import * as config$0 from "../config/models.js";
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
-import * as core$0 from "../core/models.js";
+import * as launch$0 from "../launch/models.js";
 
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
@@ -50,6 +50,20 @@ export function ApplyKeys(draft: config$0.Config, keys: { [_ in string]?: string
 }
 
 /**
+ * CancelJob stops it.
+ */
+export function CancelJob(tool: launch$0.Tool): $CancellablePromise<void> {
+    return $Call.ByID(218579568, tool);
+}
+
+/**
+ * ChooseFolder asks for a launch folder; "" when cancelled.
+ */
+export function ChooseFolder(tool: launch$0.Tool, current: string): $CancellablePromise<string> {
+    return $Call.ByID(493082626, tool, current);
+}
+
+/**
  * ClearActivity empties it.
  */
 export function ClearActivity(): $CancellablePromise<void> {
@@ -61,6 +75,13 @@ export function ClearActivity(): $CancellablePromise<void> {
  */
 export function Close(): $CancellablePromise<void> {
     return $Call.ByID(3916431365);
+}
+
+/**
+ * CloseWindow hides a tool's launch or install window ("launch" / "install").
+ */
+export function CloseWindow(kind: string, tool: launch$0.Tool): $CancellablePromise<void> {
+    return $Call.ByID(3460960829, kind, tool);
 }
 
 /**
@@ -93,10 +114,53 @@ export function ImportInto(draft: config$0.Config, data: string): $CancellablePr
 }
 
 /**
+ * Install installs ("install") or updates ("update") a tool, showing its
+ * progress window.
+ */
+export function Install(tool: launch$0.Tool, verb: app$0.MenuAction): $CancellablePromise<app$0.JobView> {
+    return $Call.ByID(1149513542, tool, verb);
+}
+
+/**
+ * Job is a tool's current or last install or update.
+ */
+export function Job(tool: launch$0.Tool): $CancellablePromise<app$0.JobView> {
+    return $Call.ByID(1769156230, tool);
+}
+
+/**
+ * Launch starts a tool with the window's choices and hides the window.
+ */
+export function Launch(tool: launch$0.Tool, opts: app$0.LaunchOptions): $CancellablePromise<$models.LaunchResult> {
+    return $Call.ByID(4149245312, tool, opts);
+}
+
+/**
+ * LaunchView is what a tool's launch window shows.
+ */
+export function LaunchView(tool: launch$0.Tool): $CancellablePromise<app$0.LaunchView> {
+    return $Call.ByID(2054185905, tool);
+}
+
+/**
  * Load is the saved settings with their view, the status and the platform.
  */
 export function Load(): $CancellablePromise<$models.Snapshot> {
     return $Call.ByID(3518124183);
+}
+
+/**
+ * OpenLaunch shows a tool's launch window.
+ */
+export function OpenLaunch(tool: launch$0.Tool): $CancellablePromise<void> {
+    return $Call.ByID(2704906860, tool);
+}
+
+/**
+ * OpenSettings shows Settings (from a launch window).
+ */
+export function OpenSettings(): $CancellablePromise<void> {
+    return $Call.ByID(1748251726);
 }
 
 /**
@@ -107,10 +171,11 @@ export function OpenURL(url: string): $CancellablePromise<void> {
 }
 
 /**
- * Probe tests a provider as the page has it (unsaved URL and key).
+ * Probe tests a provider as the draft has it (unsaved URL and key) and
+ * syncs its models into the draft.
  */
-export function Probe(b: config$0.Backend): $CancellablePromise<core$0.Probe> {
-    return $Call.ByID(1833561243, b);
+export function Probe(draft: config$0.Config, id: string): $CancellablePromise<app$0.ProbeView> {
+    return $Call.ByID(1833561243, draft, id);
 }
 
 /**
@@ -118,13 +183,6 @@ export function Probe(b: config$0.Backend): $CancellablePromise<core$0.Probe> {
  */
 export function RemoveProvider(draft: config$0.Config, id: string): $CancellablePromise<app$0.View> {
     return $Call.ByID(358332178, draft, id);
-}
-
-/**
- * RenameModel changes the name sessions see for a model.
- */
-export function RenameModel(draft: config$0.Config, old: string, name: string): $CancellablePromise<app$0.View> {
-    return $Call.ByID(1864848234, draft, old, name);
 }
 
 /**
@@ -142,24 +200,17 @@ export function Save(draft: config$0.Config): $CancellablePromise<app$0.SaveResu
 }
 
 /**
+ * SetDefaultModel sets the default model ("" = the server's recommendation).
+ */
+export function SetDefaultModel(draft: config$0.Config, id: string): $CancellablePromise<app$0.View> {
+    return $Call.ByID(2151726443, draft, id);
+}
+
+/**
  * SetDocuments applies the documents picker.
  */
 export function SetDocuments(draft: config$0.Config, value: string): $CancellablePromise<app$0.View> {
     return $Call.ByID(3206712709, draft, value);
-}
-
-/**
- * SetEnabled ticks or unticks a provider's model.
- */
-export function SetEnabled(draft: config$0.Config, tag: string, on: boolean): $CancellablePromise<app$0.View> {
-    return $Call.ByID(3411629886, draft, tag, on);
-}
-
-/**
- * SetRole points a role at a model by its picker tag ("" = same as main / none).
- */
-export function SetRole(draft: config$0.Config, slot: app$0.Slot, tag: string): $CancellablePromise<app$0.View> {
-    return $Call.ByID(1541928761, draft, slot, tag);
 }
 
 /**
@@ -188,4 +239,11 @@ export function TestOCR(url: string): $CancellablePromise<app$0.CheckResult> {
  */
 export function TestSearch(provider: config$0.SearchProvider, key: string): $CancellablePromise<app$0.CheckResult> {
     return $Call.ByID(3946807027, provider, key);
+}
+
+/**
+ * Tools are Claude Code's and Codex's installs.
+ */
+export function Tools(): $CancellablePromise<app$0.ToolView[] | null> {
+    return $Call.ByID(462807518);
 }

@@ -4,8 +4,9 @@
 // the draft directly.
 import {
   Settings, canonical, clone, onActivity, onSettingsOpen, onStatus,
+  onTools, Tool, MenuAction,
   type CheckResult, type ChoiceGroup, type Config, type Entry, type ImportPreview, type KeyNeed, type Option, type Probe,
-  type Snapshot, type Status, type View, Slot,
+  type Snapshot, type Status, type ToolView, type View,
 } from "./api";
 
 type Platform = Snapshot["platform"];
@@ -59,6 +60,11 @@ class SettingsState {
   /** Keys an import still needs. */
   needs = $state<KeyNeed[]>([]);
   importPreview = $state<ImportPreview | null>(null);
+  /** The server's recommended model, for the default model picker. */
+  recommendation = $state("");
+  tools = $state<ToolView[]>([]);
+  /** Get started worked: show "You're set up". */
+  setUp = $state(false);
 
   dirty = $derived(this.loaded && canonical(this.draft) !== canonical(this.saved));
 
@@ -89,6 +95,7 @@ class SettingsState {
     this.searchValue = v.searchValue;
     this.documentsOptions = v.documents ?? [];
     this.documentsValue = v.documentsValue;
+    this.recommendation = v.recommendation;
   }
 
   async load() {
@@ -101,6 +108,7 @@ class SettingsState {
     this.loadWarning = s.loadWarning;
     this.path = s.path;
     this.getStarted = s.getStarted;
+    this.tools = s.tools ?? [];
     if (!this.loaded || !this.dirty) {
       this.draft = normalize(clone(s.saved));
       this.derive(s.view);
@@ -118,6 +126,7 @@ class SettingsState {
       onStatus((s) => (this.status = s)),
       onActivity((e) => (this.activity = [e, ...this.activity].slice(0, 200))),
       onSettingsOpen(() => this.load()),
+      onTools(() => Settings.Tools().then((t) => (this.tools = t ?? []))),
     ];
     return () => off.forEach((f) => f());
   }
@@ -131,14 +140,8 @@ class SettingsState {
     await this.edit((d) => Settings.Describe(d));
   }
 
-  setRole(slot: Slot, tag: string) {
-    return this.edit((d) => Settings.SetRole(d, slot, tag));
-  }
-  setEnabled(tag: string, on: boolean) {
-    return this.edit((d) => Settings.SetEnabled(d, tag, on));
-  }
-  renameModel(old: string, name: string) {
-    return this.edit((d) => Settings.RenameModel(d, old, name));
+  setDefaultModel(id: string) {
+    return this.edit((d) => Settings.SetDefaultModel(d, id));
   }
   addProvider() {
     return this.edit((d) => Settings.AddProvider(d));
@@ -156,16 +159,23 @@ class SettingsState {
   }
 
   async probe(id: string) {
-    const b = this.draft.backends?.find((x) => x.id === id);
-    if (!b || this.probing[id]) return;
+    if (this.probing[id]) return;
     this.probing[id] = true;
     try {
-      const p = await Settings.Probe($state.snapshot(b));
-      this.probes[id] = p;
-      await this.refresh();
+      const r = await this.run(() => Settings.Probe(this.snapshot(), id));
+      this.probes[id] = r.probe;
+      this.apply(r.view);
     } finally {
       this.probing[id] = false;
     }
+  }
+
+  install(tool: Tool, verb: MenuAction) {
+    return Settings.Install(tool, verb);
+  }
+
+  openLaunch(tool: Tool) {
+    return Settings.OpenLaunch(tool);
   }
 
   testOCR(url: string): Promise<CheckResult> {
@@ -237,6 +247,7 @@ class SettingsState {
     } else {
       this.apply(r.view);
     }
+    if (this.getStarted) this.setUp = true;
     this.getStarted = null;
     this.probes = ((await Settings.Load()).probes ?? {}) as Record<string, Probe>;
     return {};
@@ -296,4 +307,4 @@ function errorText(e: unknown): string {
 }
 
 export const settings = new SettingsState();
-export { Slot };
+export { Tool, MenuAction };

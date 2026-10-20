@@ -12,7 +12,9 @@ export type {
     Config,
     Documents,
     Launch,
+    LaunchChoice,
     Model,
+    Recommended,
     Roles,
     WebSearch
 } from "./models.js";

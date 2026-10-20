@@ -3,9 +3,30 @@
   import Section from "./Section.svelte";
   import Row from "./Row.svelte";
   import Switch from "./Switch.svelte";
+  import { MenuAction } from "../lib/state.svelte";
+  import type { ToolView } from "../lib/api";
+
+  function line(t: ToolView): string {
+    if (!t.checked) return "Checking…";
+    if (!t.installed) return "Not installed";
+    let s = t.version ? "Version " + t.version : "Installed";
+    if (t.action === "update" && t.latest) s += " · " + t.latest + " available";
+    return s;
+  }
 </script>
 
 <Section title="Launch">
+  {#each settings.tools as t (t.tool)}
+    <Row label={t.name} hint={t.problem || line(t)}>
+      {#if t.busy}
+        <span class="secondary">Working…</span>
+      {:else if t.action === "install"}
+        <button onclick={() => settings.install(t.tool, MenuAction.ActInstall)}>Install</button>
+      {:else if t.action === "update"}
+        <button onclick={() => settings.install(t.tool, MenuAction.ActUpdate)}>Update</button>
+      {/if}
+    </Row>
+  {/each}
   <Row label="Terminal">
     <select bind:value={settings.draft.launch.terminal} aria-label="Terminal">
       {#each settings.platform.terminals ?? [] as t}

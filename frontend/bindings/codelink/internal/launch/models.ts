@@ -8,3 +8,16 @@ export interface Choice {
     "value": string;
     "label": string;
 }
+
+/**
+ * Tool is a coding tool code-link launches.
+ */
+export enum Tool {
+    /**
+     * The Go zero value for the underlying type of the enum.
+     */
+    $zero = "",
+
+    ClaudeCode = "claude",
+    Codex = "codex",
+};

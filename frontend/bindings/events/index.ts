@@ -14,6 +14,16 @@ import "../github.com/wailsapp/wails/v3/internal/eventcreate.js";
 export const Activity = "activity";
 
 /**
+ * Name of the custom event "job".
+ */
+export const Job = "job";
+
+/**
+ * Name of the custom event "launch:open".
+ */
+export const LaunchOpen = "launch:open";
+
+/**
  * Name of the custom event "settings:open".
  */
 export const SettingsOpen = "settings:open";
@@ -22,4 +32,9 @@ export const SettingsOpen = "settings:open";
  * Name of the custom event "status".
  */
 export const Status = "status";
+
+/**
+ * Name of the custom event "tools".
+ */
+export const Tools = "tools";
 

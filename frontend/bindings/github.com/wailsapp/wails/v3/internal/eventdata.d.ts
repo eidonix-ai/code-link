@@ -13,8 +13,11 @@ declare module "@wailsio/runtime" {
     namespace Events {
         interface CustomEvents {
             "activity": app$0.Entry;
+            "job": app$0.JobView;
+            "launch:open": string;
             "settings:open": string;
             "status": app$0.Status;
+            "tools": string;
         }
     }
 }

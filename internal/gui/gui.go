@@ -1,11 +1,10 @@
 // Package gui is code-link's Wails shell: the tray (menu bar) item, the
-// Settings window and the dialogs, over internal/app.
+// Settings, launch and install windows, and the dialogs, over internal/app.
 package gui
 
 import (
-	"errors"
+	"context"
 	"io/fs"
-	"os"
 	"runtime"
 	"strings"
 	"sync"
@@ -19,17 +18,26 @@ import (
 	"codelink/internal/launch"
 )
 
-// Event names the Settings page listens to.
+// Event names the pages listen to.
 const (
 	EventStatus       = "status"
 	EventActivity     = "activity"
 	EventSettingsOpen = "settings:open"
+	// EventLaunchOpen (the tool) asks a launch window to reload its view.
+	EventLaunchOpen = "launch:open"
+	// EventJob is an install or update's progress.
+	EventJob = "job"
+	// EventTools: the tools' installs or the settings changed.
+	EventTools = "tools"
 )
 
 func init() {
 	application.RegisterEvent[app.Status](EventStatus)
 	application.RegisterEvent[app.Entry](EventActivity)
 	application.RegisterEvent[string](EventSettingsOpen)
+	application.RegisterEvent[string](EventLaunchOpen)
+	application.RegisterEvent[app.JobView](EventJob)
+	application.RegisterEvent[string](EventTools)
 }
 
 // GUI is the running shell.
@@ -39,6 +47,8 @@ type GUI struct {
 	tray     *application.SystemTray
 	menu     *application.Menu
 	settings *application.WebviewWindow
+	launch   map[launch.Tool]*application.WebviewWindow
+	install  map[launch.Tool]*application.WebviewWindow
 
 	mu       sync.Mutex
 	menuSig  string
@@ -48,9 +58,13 @@ type GUI struct {
 // UniqueID keeps one code-link running per user.
 const UniqueID = "com.eidonix.code-link"
 
+// ToolCheckInterval is how often the Claude Code and Codex installs are
+// re-checked for updates.
+const ToolCheckInterval = 6 * time.Hour
+
 // Run shows the tray and runs until Quit. assets is the built frontend.
 func Run(a *app.App, assets fs.FS) error {
-	g := &GUI{app: a}
+	g := &GUI{app: a, launch: map[launch.Tool]*application.WebviewWindow{}, install: map[launch.Tool]*application.WebviewWindow{}}
 	g.wails = application.New(application.Options{
 		Name:        "code-link",
 		Description: "Claude Code and Codex on your own models",
@@ -76,21 +90,15 @@ func Run(a *app.App, assets fs.FS) error {
 		g.wails.Menu.Set(m)
 	}
 
-	g.settings = g.wails.Window.NewWithOptions(application.WebviewWindowOptions{
-		Name:      "settings",
-		Title:     "code-link Settings",
-		Width:     640,
-		Height:    780,
-		MinWidth:  520,
-		MinHeight: 420,
-		Hidden:    true,
-		URL:       "/",
-		Mac:       application.MacWindow{Backdrop: application.MacBackdropNormal},
-	})
-	g.settings.RegisterHook(events.Common.WindowClosing, func(e *application.WindowEvent) {
-		g.settings.Hide()
-		e.Cancel()
-	})
+	g.settings = g.window("settings", "code-link Settings", "/", 640, 780)
+	for _, t := range launch.Tools {
+		h := 480 // Claude Code's window has More options
+		if t == launch.Codex {
+			h = 340
+		}
+		g.launch[t] = g.window("launch-"+string(t), "Launch "+t.DisplayName(), "/#/launch/"+string(t), 480, h)
+		g.install[t] = g.window("install-"+string(t), t.DisplayName(), "/#/install/"+string(t), 480, 380)
+	}
 
 	g.menu = application.NewMenu()
 	g.tray = g.wails.SystemTray.New()
@@ -104,24 +112,46 @@ func Run(a *app.App, assets fs.FS) error {
 	a.OnChange = func() {
 		g.updateTray(false)
 		g.wails.Event.Emit(EventStatus, a.Status())
+		g.wails.Event.Emit(EventTools, "")
 	}
+	a.OnJob = func(v app.JobView) { g.wails.Event.Emit(EventJob, v) }
 	a.Activity.OnAppend = func(e app.Entry) { g.wails.Event.Emit(EventActivity, e) }
 
 	g.wails.Event.OnApplicationEvent(events.Common.ApplicationStarted, func(*application.ApplicationEvent) {
 		if err := a.SyncLoginItem(); err != nil {
 			a.Activity.Record(hookError("Open at login: " + err.Error()))
 		}
+		ctx := g.wails.Context()
 		go func() {
 			a.Start()
 			if !a.Configured() {
 				time.Sleep(400 * time.Millisecond)
 				g.OpenSettings()
 			}
+			a.SyncAll(ctx)
 		}()
-		go a.Watch(g.wails.Context(), 20*time.Second)
+		go func() {
+			a.RefreshTools(ctx)
+			a.WatchTools(ctx, ToolCheckInterval)
+		}()
+		go a.Watch(ctx, 20*time.Second)
 	})
 	g.wails.OnShutdown(a.Stop)
 	return g.wails.Run()
+}
+
+// window is a hidden window that hides again when closed.
+func (g *GUI) window(name, title, url string, w, h int) *application.WebviewWindow {
+	win := g.wails.Window.NewWithOptions(application.WebviewWindowOptions{
+		Name: name, Title: title, URL: url, Width: w, Height: h, MinWidth: 420, MinHeight: 320,
+		Hidden: true,
+		Mac:    application.MacWindow{Backdrop: application.MacBackdropNormal},
+	})
+	win.RegisterHook(events.Common.WindowClosing, func(e *application.WindowEvent) {
+		win.Hide()
+		e.Cancel()
+	})
+	return win
 }
 
 // OpenSettings shows the Settings window in front.
@@ -129,6 +159,35 @@ func (g *GUI) OpenSettings() {
 	g.wails.Event.Emit(EventSettingsOpen, "")
 	g.settings.Show()
 	g.settings.Focus()
+}
+
+// OpenLaunch shows a tool's launch window and brings the providers'
+// models up to date for it.
+func (g *GUI) OpenLaunch(t launch.Tool) {
+	w := g.launch[t]
+	if w == nil {
+		return
+	}
+	g.wails.Event.Emit(EventLaunchOpen, string(t))
+	w.Show()
+	w.Focus()
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+		defer cancel()
+		g.app.SyncAll(ctx)
+		g.wails.Event.Emit(EventLaunchOpen, string(t))
+	}()
+}
+
+// OpenInstall starts installing or updating a tool and shows its progress.
+func (g *GUI) OpenInstall(t launch.Tool, verb app.MenuAction) app.JobView {
+	v := g.app.StartJob(t, verb)
+	if w := g.install[t]; w != nil {
+		g.wails.Event.Emit(EventJob, v)
+		w.Show()
+		w.Focus()
+	}
+	return v
 }
 
 // title is a menu label in the platform's case: Title Case on macOS,
@@ -144,11 +203,14 @@ func title(mac, win string) string {
 // icon for the status.
 func (g *GUI) updateTray(force bool) {
 	st := g.app.Status()
-	cfg := g.app.Config()
-	recents := g.app.RecentFolders()
-	sig := st.Line + "|" + strings.Join(recents, "|")
-	if cfg.Configured() {
-		sig += "|configured"
+	var items []app.MenuItem
+	for _, t := range launch.Tools {
+		info, checked := g.app.ToolInfo(t)
+		items = append(items, app.ToolMenu(t, info, checked)...)
+	}
+	sig := st.Line
+	for _, i := range items {
+		sig += "|" + i.Label
 	}
 	g.mu.Lock()
 	rebuild := force || sig != g.menuSig
@@ -174,26 +236,12 @@ func (g *GUI) updateTray(force bool) {
 	m.Clear()
 	m.Add(st.Line).SetEnabled(false)
 	m.AddSeparator()
-	home, _ := os.UserHomeDir()
-	for _, t := range launch.Tools {
-		label := "Launch " + t.DisplayName()
-		if len(recents) == 0 || !cfg.Configured() {
-			m.Add(label + "…").SetEnabled(cfg.Configured()).OnClick(func(*application.Context) { g.chooseAndLaunch(t) })
-			continue
+	for _, it := range items {
+		if it.Action == app.ActLaunch {
+			m.Add(it.Label).OnClick(func(*application.Context) { g.OpenLaunch(it.Tool) })
+		} else {
+			m.Add(it.Label).OnClick(func(*application.Context) { g.OpenInstall(it.Tool, it.Action) })
 		}
-		sub := m.AddSubmenu(label)
-		sub.Add(title("Choose Folder…", "Choose folder…")).OnClick(func(*application.Context) { g.chooseAndLaunch(t) })
-		sub.AddSeparator()
-		for _, p := range recents {
-			sub.Add(app.FolderTitle(p, home)).OnClick(func(*application.Context) { go g.launch(t, p) })
-		}
-		sub.AddSeparator()
-		sub.Add(title("Clear Recent Folders", "Clear recent folders")).OnClick(func(*application.Context) { g.app.ClearRecentFolders() })
-	}
-	m.AddSeparator()
-	for _, t := range launch.Tools {
-		m.Add(title("Copy "+t.DisplayName()+" Command", "Copy "+t.DisplayName()+" command")).SetEnabled(cfg.Configured()).
-			OnClick(func(*application.Context) { g.copyCommand(t) })
 	}
 	m.AddSeparator()
 	m.Add(title("Settings…", "Settings…")).OnClick(func(*application.Context) { g.OpenSettings() })
@@ -201,67 +249,28 @@ func (g *GUI) updateTray(force bool) {
 	m.Update()
 }
 
-func (g *GUI) copyCommand(t launch.Tool) {
-	cmd, err := g.app.Command(t)
-	if err != nil {
-		g.alert("Can't copy the "+t.DisplayName()+" command", err.Error())
-		return
-	}
-	g.wails.Clipboard.SetText(cmd)
-}
-
-// chooseAndLaunch asks for a folder (starting at the last one) and launches.
-func (g *GUI) chooseAndLaunch(t launch.Tool) {
-	go func() {
-		if !g.app.Configured() {
-			g.launch(t, "")
-			return
-		}
-		activate()
-		d := g.wails.Dialog.OpenFile().
-			CanChooseFiles(false).
-			CanChooseDirectories(true).
-			CanCreateDirectories(true).
-			SetTitle("Choose the folder to start " + t.DisplayName() + " in").
-			SetMessage("Choose the folder to start " + t.DisplayName() + " in").
-			SetButtonText("Launch")
-		if r := g.app.RecentFolders(); len(r) > 0 {
-			d.SetDirectory(r[0])
-		}
-		folder, err := d.PromptForSingleSelection()
-		if err != nil || folder == "" {
-			return
-		}
-		g.launch(t, folder)
-	}()
-}
-
-// launch runs a tool in a folder and explains anything that stops it.
-func (g *GUI) launch(t launch.Tool, folder string) {
-	err := g.app.Launch(t, folder)
-	var missing *app.MissingCLIError
-	switch {
-	case err == nil, errors.Is(err, app.ErrBusy):
-	case errors.Is(err, app.ErrNotConfigured):
-		g.alert("Nothing to launch yet", "Add a provider and pick a main model in Settings first.")
-		g.OpenSettings()
-	case errors.As(err, &missing):
-		activate()
-		q := g.wails.Dialog.Question().SetTitle(t.DisplayName() + " isn't installed").SetMessage(err.Error())
-		open := q.AddButton("Open install page")
-		open.OnClick(func() { g.wails.Browser.OpenURL(t.InstallURL()) })
-		cancel := q.AddButton("Cancel")
-		q.SetDefaultButton(open)
-		q.SetCancelButton(cancel)
-		q.Show()
-	default:
-		g.alert("Couldn't launch "+t.DisplayName(), upperFirst(err.Error()))
-	}
-}
-
-func (g *GUI) alert(title, detail string) {
+// chooseFolder asks for a folder, starting at current, over the tool's
+// launch window; "" when cancelled.
+func (g *GUI) chooseFolder(t launch.Tool, current string) string {
 	activate()
-	g.wails.Dialog.Info().SetTitle(title).SetMessage(detail).Show()
+	d := g.wails.Dialog.OpenFile().
+		CanChooseFiles(false).
+		CanChooseDirectories(true).
+		CanCreateDirectories(true).
+		SetTitle("Choose the folder to start " + t.DisplayName() + " in").
+		SetMessage("Choose the folder to start " + t.DisplayName() + " in").
+		SetButtonText("Choose")
+	if w := g.launch[t]; w != nil {
+		d.AttachToWindow(w)
+	}
+	if current != "" {
+		d.SetDirectory(current)
+	}
+	folder, err := d.PromptForSingleSelection()
+	if err != nil {
+		return ""
+	}
+	return folder
 }
 
 func upperFirst(s string) string {

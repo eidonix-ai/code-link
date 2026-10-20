@@ -11,7 +11,6 @@
   });
 
   const probe: Probe | undefined = $derived(settings.probes[backend.id]);
-  const items = $derived(settings.groups.find((g) => g.backend === backend.id)?.items ?? []);
   const inUse = $derived((settings.draft.models ?? []).filter((m) => m.backend === backend.id).length);
 
   function host(u: string): string {
@@ -64,22 +63,11 @@
     input.value = settings.draft.backends?.some((b) => b.id === input.value.trim()) ? input.value.trim() : old;
   }
 
-  async function renameModel(e: Event & { currentTarget: HTMLInputElement }, old: string) {
-    const input = e.currentTarget;
-    await settings.renameModel(old, input.value);
-    if (!settings.draft.models?.some((m) => m.id === input.value.trim())) input.value = old;
-  }
 
-  function model(id: string) {
-    return settings.draft.models?.find((m) => m.id === id);
-  }
 
-  function setContext(id: string, v: string) {
-    const m = model(id);
-    if (!m) return;
-    const n = parseInt(v, 10);
-    m.contextWindow = n > 0 ? n : null;
-  }
+
+
+
 </script>
 
 <div class="provider">
@@ -89,7 +77,7 @@
     <span class="secondary host">{host(backend.baseURL)}</span>
     <span class="spacer"></span>
     {#if offers(probe)}<span class="secondary">{offers(probe)}</span>{/if}
-    {#if inUse > 0}<span class="secondary">{inUse} in use</span>{/if}
+    {#if inUse > 0}<span class="secondary">{inUse} model{inUse === 1 ? "" : "s"}</span>{/if}
     <span class="chev" class:open={expanded}>›</span>
   </button>
 
@@ -136,32 +124,6 @@
           <button onclick={() => settings.probe(backend.id)} disabled={settings.probing[backend.id]}>Test</button>
         </div>
       </div>
-
-      {#if items.length > 0}
-        <div class="models">
-          <div class="models-head secondary">Models — tick the ones to use</div>
-          {#each items as it (it.tag)}
-            <div class="model">
-              <label class="tick">
-                <input type="checkbox" checked={it.enabled} onchange={(e) => settings.setEnabled(it.tag, e.currentTarget.checked)} />
-                <span class="mname">{it.upstream}</span>
-                <span class="secondary facts">{it.facts}</span>
-              </label>
-              {#if it.enabled}
-                <div class="alias">
-                  <input type="text" value={it.modelID} onchange={(e) => renameModel(e, it.modelID)}
-                    title="The name Claude Code and Codex see" aria-label="Name shown to Claude Code" spellcheck="false" />
-                  <input type="number" min="0" value={model(it.modelID)?.contextWindow ?? ""}
-                    oninput={(e) => setContext(it.modelID, e.currentTarget.value)}
-                    placeholder="Context" title="Context window in tokens; empty = detected from the provider" aria-label="Context window" />
-                </div>
-              {/if}
-            </div>
-          {/each}
-        </div>
-      {:else if probe?.reachable}
-        <div class="models secondary">The provider reported no models.</div>
-      {/if}
 
       <div class="actions">
         <button class="link" onclick={() => settings.removeProvider(backend.id)}>Remove provider</button>
@@ -228,40 +190,6 @@
     justify-content: space-between;
     gap: 10px;
     min-height: 24px;
-  }
-  .models {
-    margin-top: 4px;
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-  }
-  .models-head {
-    font-size: 0.92em;
-    margin-bottom: 2px;
-  }
-  .model {
-    padding: 3px 0;
-  }
-  .tick {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-  .mname {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  .facts {
-    margin-left: auto;
-    white-space: nowrap;
-    font-size: 0.92em;
-  }
-  .alias {
-    display: grid;
-    grid-template-columns: 1fr 96px;
-    gap: 6px;
-    margin: 5px 0 3px 22px;
   }
   .actions {
     display: flex;
