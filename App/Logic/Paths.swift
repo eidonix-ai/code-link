@@ -8,6 +8,7 @@ struct AppPaths: Sendable, Equatable {
     var configFile: URL { supportDirectory.appendingPathComponent("config.json") }
     var claudeSettingsFile: URL { supportDirectory.appendingPathComponent("claude-settings.json") }
     var appSettingsFile: URL { supportDirectory.appendingPathComponent("app-settings.json") }
+    var accessTokenFile: URL { supportDirectory.appendingPathComponent("access-token") }
     var launchDirectory: URL { cacheDirectory.appendingPathComponent("launch", isDirectory: true) }
 
     static func live(fileManager: FileManager = .default) -> AppPaths {

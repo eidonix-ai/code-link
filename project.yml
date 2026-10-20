@@ -30,7 +30,10 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.eidonix.code-link
-        CODE_SIGN_IDENTITY: "-"
+        # A stable identity: macOS keeps Keychain and Login Items approval
+        # across rebuilds (an ad-hoc signature changes with every build).
+        CODE_SIGN_IDENTITY: "Apple Development"
+        DEVELOPMENT_TEAM: 342KG4SM2D
         CODE_SIGN_STYLE: Manual
         ENABLE_HARDENED_RUNTIME: NO
         COMBINE_HIDPI_IMAGES: YES

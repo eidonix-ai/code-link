@@ -93,12 +93,16 @@ private func sample() -> EngineConfig {
     #expect(backend.get("r1") == nil && backend.get("r2") == "k2" && !secrets.hasPending)
 }
 
-@Test func accessTokenIsGeneratedOnceAsBase64URL() {
-    let backend = MemorySecretBackend()
-    let t = AccessToken.loadOrCreate(in: backend)
+@Test func accessTokenIsGeneratedOnceAsBase64URLInAPrivateFile() throws {
+    let dir = FileManager.default.temporaryDirectory.appendingPathComponent("cl-token-\(UUID().uuidString)")
+    defer { try? FileManager.default.removeItem(at: dir) }
+    let file = dir.appendingPathComponent("access-token")
+    let t = AccessToken.loadOrCreate(at: file)
     #expect(t.count == 43)
     #expect(t.allSatisfy { $0.isLetter || $0.isNumber || $0 == "-" || $0 == "_" })
-    #expect(AccessToken.loadOrCreate(in: backend) == t)
+    #expect(AccessToken.loadOrCreate(at: file) == t)
+    let mode = try FileManager.default.attributesOfItem(atPath: file.path)[.posixPermissions] as? Int
+    #expect(mode == 0o600)
     #expect(AccessToken.make() != AccessToken.make())
 }
 

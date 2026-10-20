@@ -89,10 +89,11 @@ final class AppSecrets: SecretStore, Sendable {
     func delete(_ ref: String) { pending.withLock { _ = $0.removeValue(forKey: ref) }; backend.delete(ref) }
 }
 
-/// The engine access token: 32 random bytes, base64url, generated once.
+/// The engine access token: 32 random bytes, base64url, generated once. It
+/// only opens the local engine and is handed to every session in its
+/// environment, so it lives in a 0600 file next to the config rather than the
+/// Keychain (which asks for a password whenever the app's signature changes).
 enum AccessToken {
-    static let account = "engine-access-token"
-
     static func make() -> String {
         var bytes = [UInt8](repeating: 0, count: 32)
         if SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes) != errSecSuccess {
@@ -103,10 +104,18 @@ enum AccessToken {
             .replacingOccurrences(of: "=", with: "")
     }
 
-    static func loadOrCreate(in backend: any SecretBackend) -> String {
-        if let t = backend.get(account), !t.isEmpty { return t }
+    static func loadOrCreate(at url: URL) -> String {
+        if let data = try? Data(contentsOf: url) {
+            let t = String(decoding: data, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
+            if !t.isEmpty { return t }
+        }
         let t = make()
-        try? backend.set(t, account: account)
+        let fm = FileManager.default
+        try? fm.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true,
+                                attributes: [.posixPermissions: 0o700])
+        if fm.createFile(atPath: url.path, contents: Data(t.utf8), attributes: [.posixPermissions: 0o600]) {
+            try? fm.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
+        }
         return t
     }
 }

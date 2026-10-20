@@ -66,7 +66,7 @@ final class AppModel {
         configStore = ConfigStore(paths: environment.paths)
         launchStore = LaunchSettingsStore(paths: environment.paths)
         secrets = AppSecrets(backend: environment.secrets)
-        accessToken = AccessToken.loadOrCreate(in: environment.secrets)
+        accessToken = AccessToken.loadOrCreate(at: environment.paths.accessTokenFile)
         let loaded = configStore.load()
         config = loaded.config
         draft = loaded.config
