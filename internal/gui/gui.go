@@ -61,6 +61,9 @@ type GUI struct {
 	mu       sync.Mutex
 	menuSig  string
 	iconKind app.StatusKind
+	// sizes are the windows' wanted sizes; shown marks those already placed.
+	sizes map[*application.WebviewWindow][2]int
+	shown map[*application.WebviewWindow]bool
 }
 
 // UniqueID keeps one code-link running per user.
@@ -182,13 +185,39 @@ func (g *GUI) window(name, title, url string, w, h int) *application.WebviewWind
 		win.Hide()
 		e.Cancel()
 	})
+	if g.sizes == nil {
+		g.sizes, g.shown = map[*application.WebviewWindow][2]int{}, map[*application.WebviewWindow]bool{}
+	}
+	g.sizes[win] = [2]int{w, h}
 	return win
+}
+
+// show brings a window up. The first time, it gets its size (at most 90% of
+// the screen's work area — 780 points is taller than a 1080p screen at 150%
+// scaling) and is centred: on Windows a window created hidden otherwise
+// opened as large as the screen.
+func (g *GUI) show(win *application.WebviewWindow) {
+	g.mu.Lock()
+	first := !g.shown[win]
+	g.shown[win] = true
+	size := g.sizes[win]
+	g.mu.Unlock()
+	if first && size[0] > 0 {
+		w, h := size[0], size[1]
+		if sc, err := win.GetScreen(); err == nil && sc != nil && sc.WorkArea.Width > 0 {
+			w = min(w, sc.WorkArea.Width*9/10)
+			h = min(h, sc.WorkArea.Height*9/10)
+		}
+		win.SetSize(w, h)
+		win.Center()
+	}
+	win.Show()
 }
 
 // OpenSettings shows the Settings window in front.
 func (g *GUI) OpenSettings() {
 	g.wails.Event.Emit(EventSettingsOpen, "")
-	g.settings.Show()
+	g.show(g.settings)
 	g.settings.Focus()
 }
 
@@ -200,7 +229,7 @@ func (g *GUI) OpenLaunch(t launch.Tool) {
 		return
 	}
 	g.wails.Event.Emit(EventLaunchOpen, string(t))
-	w.Show()
+	g.show(w)
 	w.Focus()
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
@@ -215,7 +244,7 @@ func (g *GUI) OpenInstall(t launch.Tool, verb app.MenuAction) app.JobView {
 	v := g.app.StartJob(t, verb)
 	if w := g.install[t]; w != nil {
 		g.wails.Event.Emit(EventJob, v)
-		w.Show()
+		g.show(w)
 		w.Focus()
 	}
 	return v
@@ -239,7 +268,7 @@ func (g *GUI) OpenUpdate() selfupdate.State {
 		})
 	}
 	g.wails.Event.Emit(EventUpdate, st)
-	g.updateWin.Show()
+	g.show(g.updateWin)
 	g.updateWin.Focus()
 	return st
 }
