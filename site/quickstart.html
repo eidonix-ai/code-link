@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>code-link quick start</title>
+<link rel="icon" href="/icon.png">
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<main>
+  <header><img src="/icon.png" alt=""><h1>Quick start</h1></header>
+  <p class="lead">From nothing to an AI coding assistant working in your project, in about five minutes.</p>
+  <nav><a href="/">Downloads</a><a href="#key">1 · Key</a><a href="#install">2 · Install</a><a href="#connect">3 · Connect</a><a href="#code">4 · Code</a><a href="#tips">Tips</a><a href="#trouble">Troubleshooting</a></nav>
+
+  <h2 id="key">1 · Get your API key</h2>
+  <ol class="steps">
+    <li>Open the join link your team gave you (it looks like <code>https://llm.eidonix.com/join/…</code>).</li>
+    <li>Enter your work email address and press the button.</li>
+    <li>Open the email from <strong>no-reply@eidonix.com</strong> and click the link in it, then press <strong>Create my key</strong>.</li>
+    <li>Copy the key it shows. It is shown only once — keep it somewhere safe, like a password manager. It is yours alone; don't share it.</li>
+  </ol>
+
+  <h2 id="install">2 · Install code-link</h2>
+  <h3>Windows</h3>
+  <ol class="steps">
+    <li><a href="/download/windows">Download code-link for Windows</a> and unzip it somewhere you'll keep it, for example <code>Documents\code-link</code>.</li>
+    <li>Double-click <code>code-link.exe</code>. If Windows says it protected your PC, choose <strong>More info → Run anyway</strong>.</li>
+    <li>code-link lives in the system tray at the bottom-right of the screen (you may need to click the <kbd>^</kbd> arrow to see its icon).</li>
+  </ol>
+  <h3>macOS</h3>
+  <ol class="steps">
+    <li><a href="/download/macos">Download code-link for macOS</a>, unzip it, and drag <strong>code-link</strong> into <strong>Applications</strong>.</li>
+    <li>The first time, right-click it and choose <strong>Open</strong>, then <strong>Open</strong> again.</li>
+    <li>code-link lives in the menu bar at the top-right of the screen.</li>
+  </ol>
+
+  <h2 id="connect">3 · Paste your key</h2>
+  <p>The first time code-link starts, its Settings window opens and asks for one thing: your API key. Paste it and press
+  <strong>Continue</strong>. code-link checks the key, picks the right models and turns on web search and document reading.
+  That's all the setup there is.</p>
+  <div class="note">Want code-link ready whenever you start your computer? In Settings, under Launch, turn on <strong>Open at login</strong>.</div>
+
+  <h2 id="code">4 · Start coding</h2>
+  <ol class="steps">
+    <li>Click the code-link icon and choose <strong>Launch Claude Code…</strong> (or <strong>Launch Codex…</strong>).
+      If it isn't installed yet, code-link offers to install it — one click, no admin rights needed.</li>
+    <li>Pick your project's folder. A terminal window opens with the assistant running in that folder.</li>
+    <li>Type what you want in plain words, for example:
+      <ul>
+        <li><em>"Explain how this project is organised."</em></li>
+        <li><em>"Add a function that reads orders.csv and totals the amounts by customer, with a test."</em></li>
+        <li><em>"The build fails with this error: … Find the cause and fix it."</em></li>
+      </ul>
+    </li>
+    <li>Watch it work. It reads files, edits them and runs commands in your project. Safe steps go ahead on their own;
+      anything risky stops and asks you first. Press <kbd>Esc</kbd> to interrupt it at any time.</li>
+  </ol>
+  <p>You can open as many sessions as you like — each launch opens another window. Recently used folders appear in the
+  code-link menu for one-click launching.</p>
+
+  <h2 id="tips">Tips</h2>
+  <ul>
+    <li><strong>Be specific.</strong> Say which files, what "done" looks like, and how to check it ("run the tests afterwards").</li>
+    <li><strong>Ask for a plan first</strong> on bigger jobs: <em>"Plan this change before editing anything."</em> In Claude Code, <kbd>Shift</kbd>+<kbd>Tab</kbd> switches between modes.</li>
+    <li><strong>Documents and pictures:</strong> mention a PDF, screenshot or diagram by its file name (or drag it into the terminal) and ask about it.</li>
+    <li><strong>The web:</strong> ask it to look something up ("check the latest version of this library") — it can search and read pages.</li>
+    <li><strong>A bigger model for hard problems:</strong> in Claude Code type <code>/model</code> and choose Opus; Sonnet is the everyday default.</li>
+    <li><strong>Use version control.</strong> In a git project, the assistant's changes are easy to review (<code>git diff</code>) and undo.</li>
+    <li><strong>Updates:</strong> when a newer Claude Code or Codex is available, code-link shows an <strong>Update</strong> button in Settings.</li>
+  </ul>
+
+  <h2 id="trouble">Troubleshooting</h2>
+  <h3>"That key wasn't accepted"</h3>
+  <p>Check you copied the whole key. If it still fails, open your join link again and ask for a new key.</p>
+  <h3>"Can't reach llm.eidonix.com"</h3>
+  <p>Check your internet connection. Some company networks or VPNs block new sites — ask IT to allow
+  <code>llm.eidonix.com</code>.</p>
+  <h3>The terminal opens and closes straight away</h3>
+  <p>Open Settings: if Claude Code or Codex shows as not installed, press <strong>Install</strong>. Otherwise use
+  <strong>Copy Claude Code Command</strong> from the code-link menu, paste it into a terminal yourself, and send the
+  message it prints to <a href="mailto:support@eidonix.com">support@eidonix.com</a>.</p>
+  <h3>Lost key, or a new computer</h3>
+  <p>Open your join link and ask for a new key; paste it into code-link's Settings. Your old key stops working.</p>
+
+  <footer><a href="/">code-link downloads</a> · Questions: <a href="mailto:support@eidonix.com">support@eidonix.com</a></footer>
+</main>
+</body>
+</html>
