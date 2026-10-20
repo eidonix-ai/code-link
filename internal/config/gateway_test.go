@@ -43,3 +43,22 @@ func TestGatewayURLUsesTheRoot(t *testing.T) {
 		t.Fatal(u)
 	}
 }
+
+func TestOffAndLocalOnlyKeepTheGatewayOut(t *testing.T) {
+	c := Default()
+	c.Backends[0].APIKey = "k"
+	c.WebSearch.Off, c.Documents.LocalOnly = true, true
+	if _, ok := c.SearchVia(); ok {
+		t.Fatal("web search is off")
+	}
+	if _, ok := c.DocumentsVia(); ok {
+		t.Fatal("documents are read locally only")
+	}
+	c.WebSearch.Via, c.Documents.Via = DefaultGatewayID, DefaultGatewayID
+	if _, ok := c.SearchVia(); ok {
+		t.Fatal("off wins over via")
+	}
+	if _, ok := c.DocumentsVia(); ok {
+		t.Fatal("local only wins over via")
+	}
+}

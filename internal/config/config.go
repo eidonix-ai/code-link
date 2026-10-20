@@ -9,8 +9,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
 	"net/url"
+	"os"
 	"path/filepath"
 	"strings"
 )
@@ -116,6 +116,8 @@ type Documents struct {
 	PaddleOCR string `json:"paddleOCR,omitempty"`
 	// Local is used when PaddleOCR isn't set, is unreachable or fails.
 	Local LocalExtraction `json:"local,omitempty"`
+	// LocalOnly: never through a gateway, even when one has a key.
+	LocalOnly bool `json:"localOnly,omitempty"`
 }
 
 type SearchProvider string
@@ -132,6 +134,8 @@ type WebSearch struct {
 	// Provider empty = off (searches answer "unavailable").
 	Provider SearchProvider `json:"provider,omitempty"`
 	APIKey   string         `json:"apiKey,omitempty"`
+	// Off: no web search, even when a gateway has a key.
+	Off bool `json:"off,omitempty"`
 }
 
 type Launch struct {
@@ -222,8 +226,12 @@ func (c *Config) Gateway() (Backend, bool) {
 }
 
 // SearchVia is the provider web search goes through: Via, else a
-// Go-LLM-Proxy when no search provider of the user's own is set.
+// Go-LLM-Proxy when no search provider of the user's own is set; none
+// when web search is Off.
 func (c *Config) SearchVia() (Backend, bool) {
+	if c.WebSearch.Off {
+		return Backend{}, false
+	}
 	if c.WebSearch.Via != "" {
 		return c.Backend(c.WebSearch.Via)
 	}
@@ -234,8 +242,12 @@ func (c *Config) SearchVia() (Backend, bool) {
 }
 
 // DocumentsVia is the provider documents go through: Via, else a
-// Go-LLM-Proxy when no PaddleOCR of the user's own is set.
+// Go-LLM-Proxy when no PaddleOCR of the user's own is set; none when
+// LocalOnly.
 func (c *Config) DocumentsVia() (Backend, bool) {
+	if c.Documents.LocalOnly {
+		return Backend{}, false
+	}
 	if c.Documents.Via != "" {
 		return c.Backend(c.Documents.Via)
 	}

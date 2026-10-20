@@ -214,3 +214,12 @@ func TestGatewayWithoutAKeyIsUnavailable(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestSearchOffIsOffEvenWithAKeyedGatewayOrOwnKey(t *testing.T) {
+	c := config.Default()
+	c.Backends[0].APIKey = "k"
+	c.WebSearch = config.WebSearch{Off: true, Provider: config.Tavily, APIKey: "tvly"}
+	if _, err := Factory(&c, nopCaller{}, nil).WebSearch.Search(context.Background(), "q", nil, nil); !errors.Is(err, hooks.ErrSearchUnavailable) {
+		t.Fatalf("err = %v", err)
+	}
+}
