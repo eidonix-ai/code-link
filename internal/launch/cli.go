@@ -97,7 +97,8 @@ func (e SearchEnv) pathDirs() []string {
 
 // InstallLocations are where the installers put a tool, outside PATH
 // lookups: the native installers, npm, pnpm, bun, Volta, Homebrew, WinGet,
-// Scoop and Cargo.
+// Scoop, Cargo, and on Windows code-link's own Codex install and OpenAI's
+// standalone installer.
 func InstallLocations(t Tool, e SearchEnv) []string {
 	name := t.Executable()
 	var out []string
@@ -117,6 +118,12 @@ func InstallLocations(t Tool, e SearchEnv) []string {
 		add(e.LocalAppData, "Volta", "bin", name+".exe")
 		if t == Codex {
 			add(e.Home, ".cargo", "bin", name+".exe")
+			if e.LocalAppData != "" {
+				// code-link's own install (internal/tools), then OpenAI's
+				// standalone installer's.
+				out = append(out, e.join(CodexDir(e), "current", "bin", "codex.exe"))
+			}
+			add(e.LocalAppData, "Programs", "OpenAI", "Codex", "bin", "codex.exe")
 		}
 		return out
 	}
@@ -135,6 +142,19 @@ func InstallLocations(t Tool, e SearchEnv) []string {
 		out = append(out, matches...)
 	}
 	return out
+}
+
+// CodexDir is where code-link installs Codex from OpenAI's GitHub releases
+// (internal/tools): %LocalAppData%\Programs\code-link\codex on Windows,
+// ~/.local/share/code-link/codex elsewhere. Each release is unpacked in
+// versions/<version>; current points at the one in use. Outside Windows the
+// command is linked from ~/.local/bin, which InstallLocations already
+// searches.
+func CodexDir(e SearchEnv) string {
+	if e.GOOS == "windows" {
+		return e.join(e.LocalAppData, "Programs", "code-link", "codex")
+	}
+	return e.join(e.Home, ".local", "share", "code-link", "codex")
 }
 
 // Candidates are every place to look, in order: PATH, then the install
