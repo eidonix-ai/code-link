@@ -23,9 +23,11 @@ on macOS and `%AppData%\Eidonix\code-link` on Windows.
 
 A fresh install ships one provider, the Go-LLM-Proxy gateway
 `llm.eidonix.com`, without a key: Settings opens on "Get started", where
-pasting the key is the whole setup (its models are enabled, the gateway's
-recommended models fill the roles, and web search and documents go through
-it). "Share settings" exports a `.codelink` file — providers, models, roles,
+pasting the key is the whole setup (the gateway's models are synced in, its
+recommendations become the defaults, and web search and documents go through
+it). Models are kept in step with the providers automatically; the model is
+chosen per launch, in the small window "Launch Claude Code…" / "Launch
+Codex…" opens from the tray, which also installs and updates the two CLIs. "Share settings" exports a `.codelink` file — providers, models, roles,
 documents and web search, never keys, the token, the port or launch
 settings — and imports one, asking for the keys it needs.
 

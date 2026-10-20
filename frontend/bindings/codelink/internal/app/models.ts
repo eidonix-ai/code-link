@@ -4,6 +4,12 @@
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
 import * as config$0 from "../config/models.js";
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore: Unused imports
+import * as core$0 from "../core/models.js";
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore: Unused imports
+import * as launch$0 from "../launch/models.js";
 
 /**
  * CheckResult is a Test button's answer.
@@ -83,6 +89,31 @@ export interface ImportResult {
 }
 
 /**
+ * JobView is an install or update as its window shows it.
+ */
+export interface JobView {
+    "tool": launch$0.Tool;
+    "name": string;
+
+    /**
+     * install, update
+     */
+    "verb": string;
+    "lines": string[] | null;
+    "running": boolean;
+    "done": boolean;
+    "ok": boolean;
+
+    /**
+     * Message is the outcome in plain words; Tail the installer's last lines
+     * when it failed ("Show details").
+     */
+    "message": string;
+    "tail": string[] | null;
+    "version": string;
+}
+
+/**
  * KeyNeed is a provider an import (or first run) wants a key for.
  */
 export interface KeyNeed {
@@ -117,11 +148,81 @@ export interface KeysResult {
 }
 
 /**
+ * LaunchOptions are a launch window's choices.
+ */
+export interface LaunchOptions {
+    "model": string;
+
+    /**
+     * Heavy (Opus / Fable) and Background (Haiku) for Claude Code; "" =
+     * the same as Model.
+     */
+    "heavy": string;
+    "background": string;
+    "folder": string;
+}
+
+/**
+ * LaunchView is what a tool's launch window shows.
+ */
+export interface LaunchView {
+    "tool": launch$0.Tool;
+    "toolName": string;
+    "groups": ChoiceGroup[] | null;
+    "options": LaunchOptions;
+
+    /**
+     * Recent are the remembered folders that still exist.
+     */
+    "recent": string[] | null;
+
+    /**
+     * Installed: the CLI was found. ToolInfo has its version and the
+     * install / update button.
+     */
+    "installed": boolean;
+    "toolInfo": ToolView;
+
+    /**
+     * Ready: there is a model to launch with.
+     */
+    "ready": boolean;
+
+    /**
+     * Tiers: the window offers the heavy and background models (Claude Code).
+     */
+    "tiers": boolean;
+}
+
+/**
+ * MenuAction is what a tray item does.
+ */
+export enum MenuAction {
+    /**
+     * The Go zero value for the underlying type of the enum.
+     */
+    $zero = "",
+
+    ActLaunch = "launch",
+    ActInstall = "install",
+    ActUpdate = "update",
+};
+
+/**
  * Option is a choice in a picker.
  */
 export interface Option {
     "value": string;
     "label": string;
+}
+
+/**
+ * ProbeView is a provider test's answer: the probe and the draft with the
+ * provider's models synced in.
+ */
+export interface ProbeView {
+    "probe": core$0.Probe;
+    "view": View;
 }
 
 /**
@@ -134,23 +235,6 @@ export interface SaveResult {
     "saved": config$0.Config;
     "status": Status;
 }
-
-/**
- * Slot is a role a picker sets.
- */
-export enum Slot {
-    /**
-     * The Go zero value for the underlying type of the enum.
-     */
-    $zero = "",
-
-    SlotMain = "main",
-    SlotOpus = "opus",
-    SlotSmall = "small",
-    SlotDecision = "decision",
-    SlotVision = "vision",
-    SlotCodex = "codex",
-};
 
 /**
  * Status is the engine's state in words.
@@ -189,6 +273,26 @@ export enum StatusKind {
 };
 
 /**
+ * ToolView is a tool's line in Settings and the launch window.
+ */
+export interface ToolView {
+    "tool": launch$0.Tool;
+    "name": string;
+    "checked": boolean;
+    "installed": boolean;
+    "version": string;
+    "latest": string;
+
+    /**
+     * Action is the button: "install", "update" or "" (none).
+     */
+    "action": string;
+    "installURL": string;
+    "problem": string;
+    "busy": boolean;
+}
+
+/**
  * View is the Settings page's draft with what it derives from it: the model
  * pickers (enabled models and the ones the last probe found), the decision
  * model's logprob note and a warning when an edit cleared roles.
@@ -206,4 +310,9 @@ export interface View {
     "searchValue": string;
     "documents": Option[] | null;
     "documentsValue": string;
+
+    /**
+     * Recommendation is the server's recommended model ("" = none yet).
+     */
+    "recommendation": string;
 }

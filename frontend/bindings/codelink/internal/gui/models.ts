@@ -15,6 +15,18 @@ import * as core$0 from "../core/models.js";
 import * as launch$0 from "../launch/models.js";
 
 /**
+ * LaunchResult is a launch's answer: "" or the problem in plain words.
+ */
+export interface LaunchResult {
+    "error": string;
+
+    /**
+     * Missing: the CLI isn't installed (the window offers Install).
+     */
+    "missing": boolean;
+}
+
+/**
  * Platform is what the page shows differently per OS.
  */
 export interface Platform {
@@ -47,4 +59,9 @@ export interface Snapshot {
      * "Paste your API key".
      */
     "getStarted": app$0.KeyNeed | null;
+
+    /**
+     * Tools are Claude Code's and Codex's installs.
+     */
+    "tools": app$0.ToolView[] | null;
 }

@@ -9,6 +9,12 @@ export interface Backend {
     "kind": BackendKind;
     "baseURL": string;
     "apiKey"?: string;
+
+    /**
+     * Recommended are the models a gateway's operator recommends per role
+     * (upstream names, from its /v1/capabilities), kept from the last sync.
+     */
+    "recommended"?: Recommended | null;
 }
 
 export enum BackendKind {
@@ -93,6 +99,32 @@ export interface Launch {
     "permissionMode"?: string;
     "openAtLogin"?: boolean;
     "recentFolders"?: string[] | null;
+
+    /**
+     * DefaultModel is the user's default model id; "" = the server's
+     * recommendation.
+     */
+    "defaultModel"?: string;
+
+    /**
+     * Last are the choices of the last launch per tool ("claude", "codex").
+     */
+    "last"?: { [_ in string]?: LaunchChoice } | null;
+}
+
+/**
+ * LaunchChoice is what a launch window chose.
+ */
+export interface LaunchChoice {
+    "model"?: string;
+
+    /**
+     * Heavy (Opus / Fable) and Background (Haiku) are Claude Code's other
+     * tiers; "" = the same as Model.
+     */
+    "heavy"?: string;
+    "background"?: string;
+    "folder"?: string;
 }
 
 export enum LocalExtraction {
@@ -150,6 +182,18 @@ export interface Model {
      * turns thinking off (e.g. {"reasoning_effort":"low"}).
      */
     "thinkingOff"?: { [_ in string]?: any } | null;
+}
+
+/**
+ * Recommended are upstream model names per role.
+ */
+export interface Recommended {
+    "main"?: string;
+    "opus"?: string;
+    "small"?: string;
+    "decision"?: string;
+    "vision"?: string;
+    "codex"?: string;
 }
 
 /**

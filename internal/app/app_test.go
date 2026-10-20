@@ -11,6 +11,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"codelink/internal/config"
@@ -182,8 +183,8 @@ func TestSaveAppliesLiveAndKeepsTheTokenAndRecents(t *testing.T) {
 	token := a.Config().AccessToken
 	a.AddRecentFolder(t.TempDir())
 	recents := a.Config().Launch.RecentFolders
-	changes := 0
-	a.OnChange = func() { changes++ }
+	var changes atomic.Int32
+	a.OnChange = func() { changes.Add(1) }
 
 	draft := stubConfig(t)
 	draft.AccessToken = "from-the-page"
@@ -192,7 +193,7 @@ func TestSaveAppliesLiveAndKeepsTheTokenAndRecents(t *testing.T) {
 	if !r.OK || !a.Running() || r.Status.Kind != Running || r.Status.Port != draft.Port {
 		t.Fatalf("%+v", r)
 	}
-	if a.Config().AccessToken != token || !reflect.DeepEqual(a.Config().Launch.RecentFolders, recents) || changes == 0 {
+	if a.Config().AccessToken != token || !reflect.DeepEqual(a.Config().Launch.RecentFolders, recents) || changes.Load() == 0 {
 		t.Errorf("token %q recents %v", a.Config().AccessToken, a.Config().Launch.RecentFolders)
 	}
 	if back, _ := LoadSettings(a.Path); back.AccessToken != token || back.Roles.Main != "GLM" {
@@ -215,7 +216,7 @@ func TestSaveAppliesLiveAndKeepsTheTokenAndRecents(t *testing.T) {
 	}
 	// Removing the main model stops the engine.
 	off := moved
-	off.Roles.Main = ""
+	off.Models = nil // no models: nothing to run
 	if r := a.Save(off); !r.OK || a.Running() || r.Status.Kind != NotConfigured {
 		t.Errorf("stop: %+v", r)
 	}
@@ -292,7 +293,7 @@ func TestOpenAtLoginFollowsTheSetting(t *testing.T) {
 
 func TestLaunchFindsTheCLIStartsTheEngineAndRemembersTheFolder(t *testing.T) {
 	a := newTestApp(t)
-	if err := a.Launch(launch.ClaudeCode, "/x"); !errors.Is(err, ErrNotConfigured) {
+	if err := a.Launch(launch.ClaudeCode, LaunchOptions{Model: "GLM", Folder: "/x"}); !errors.Is(err, ErrNotConfigured) {
 		t.Fatalf("not configured: %v", err)
 	}
 	cfg := stubConfig(t)
@@ -304,7 +305,8 @@ func TestLaunchFindsTheCLIStartsTheEngineAndRemembersTheFolder(t *testing.T) {
 
 	a.Find = func(launch.Tool) (launch.Found, bool) { return launch.Found{}, false }
 	var missing *MissingCLIError
-	if err := a.Launch(launch.Codex, "/x"); !errors.As(err, &missing) || missing.Tool != launch.Codex || !strings.Contains(err.Error(), "Install Codex") {
+	folder := t.TempDir()
+	if err := a.Launch(launch.Codex, LaunchOptions{Model: "GLM", Folder: folder}); !errors.As(err, &missing) || missing.Tool != launch.Codex || !strings.Contains(err.Error(), "Install Codex") {
 		t.Fatalf("missing: %v", err)
 	}
 
@@ -317,9 +319,23 @@ func TestLaunchFindsTheCLIStartsTheEngineAndRemembersTheFolder(t *testing.T) {
 		gotOpener, gotCmd, gotFolder, gotDir = o, command, folder, pathDir
 		return nil
 	}
-	folder := t.TempDir()
-	if err := a.Launch(launch.ClaudeCode, folder); err != nil {
+	if err := a.Launch(launch.ClaudeCode, LaunchOptions{Model: "Small", Heavy: "Big", Folder: folder}); err != nil {
 		t.Fatal(err)
+	}
+	if !strings.Contains(gotCmd, "ANTHROPIC_MODEL=Small ") || !strings.Contains(gotCmd, "ANTHROPIC_DEFAULT_OPUS_MODEL=Big ") ||
+		!strings.Contains(gotCmd, "ANTHROPIC_SMALL_FAST_MODEL=Small ") || !strings.Contains(gotCmd, "CLAUDE_CODE_MAX_CONTEXT_TOKENS=32000 ") {
+		t.Errorf("session models:\n%s", gotCmd)
+	}
+	if last := a.Config().Launch.Last["claude"]; last != (config.LaunchChoice{Model: "Small", Heavy: "Big", Folder: folder}) {
+		t.Errorf("remembered %+v", last)
+	}
+	if o := Remembered(func() *config.Config { c := a.Config(); return &c }(), launch.ClaudeCode, nil); o.Model != "Small" || o.Heavy != "Big" || o.Folder != folder {
+		t.Errorf("reopened with %+v", o)
+	}
+	for _, bad := range []LaunchOptions{{Model: "gone", Folder: folder}, {Model: "GLM", Heavy: "gone", Folder: folder}, {Model: "GLM"}, {Model: "GLM", Folder: folder + "/nope"}} {
+		if err := a.Launch(launch.ClaudeCode, bad); err == nil {
+			t.Errorf("accepted %+v", bad)
+		}
 	}
 	if !a.Running() || !strings.Contains(gotCmd, "ANTHROPIC_BASE_URL") || !strings.Contains(gotCmd, "127.0.0.1:"+strconv.Itoa(cfg.Port)) {
 		t.Errorf("command:\n%s", gotCmd)
@@ -336,7 +352,7 @@ func TestLaunchFindsTheCLIStartsTheEngineAndRemembersTheFolder(t *testing.T) {
 
 	a.Open = func(launch.Opener, string, string, string) error { return errors.New("osascript said no") }
 	var term *TerminalError
-	if err := a.Launch(launch.ClaudeCode, folder); !errors.As(err, &term) || !strings.Contains(err.Error(), "Copy Claude Code command") {
+	if err := a.Launch(launch.ClaudeCode, LaunchOptions{Model: "GLM", Folder: folder}); !errors.As(err, &term) || !strings.Contains(err.Error(), "Copy Claude Code command") {
 		t.Errorf("terminal: %v", err)
 	}
 	a.ClearRecentFolders()
@@ -345,21 +361,28 @@ func TestLaunchFindsTheCLIStartsTheEngineAndRemembersTheFolder(t *testing.T) {
 	}
 }
 
-func TestProbeIsRememberedForThePickers(t *testing.T) {
+func TestTestingAProviderSyncsItsModels(t *testing.T) {
 	a := newTestApp(t)
 	cfg := stubConfig(t)
-	p := a.Probe(context.Background(), cfg.Backends[0])
-	if !p.Reachable || len(p.Models) != 2 {
-		t.Fatalf("%+v", p)
+	cfg.Launch.DefaultModel = "Big" // the user's choice survives the provider dropping it
+	pv := a.EditProbe(context.Background(), cfg, "stub")
+	if !pv.Probe.Reachable || len(pv.Probe.Models) != 2 {
+		t.Fatalf("%+v", pv.Probe)
 	}
-	v := a.Describe(cfg)
+	// The stub lists glm-upstream and other: GLM stays, other arrives with its
+	// window, Small goes, Big stays because it is the default model.
 	var titles []string
-	for _, it := range v.Groups[0].Items {
+	for _, it := range pv.View.Groups[0].Items {
 		titles = append(titles, it.Title)
 	}
-	// Enabled models first, then the probe's.
-	if strings.Join(titles, ",") != "GLM,Small,Big,glm-upstream,other" && strings.Join(titles, ",") != "GLM,Small,Big,other" {
+	if strings.Join(titles, ",") != "GLM,Big,other" {
 		t.Errorf("%v", titles)
+	}
+	if m, _ := pv.View.Draft.Model("GLM"); *m.ContextWindow != 131072 {
+		t.Errorf("window from the probe: %+v", m)
+	}
+	if pv.View.Draft.Roles.Main != "Big" || pv.View.Recommendation != "GLM" {
+		t.Errorf("roles %+v rec %q", pv.View.Draft.Roles, pv.View.Recommendation)
 	}
 }
 

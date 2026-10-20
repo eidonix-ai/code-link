@@ -2,6 +2,7 @@ package gui
 
 import (
 	"context"
+	"errors"
 	"os"
 	"runtime"
 	"strings"
@@ -12,6 +13,8 @@ import (
 	"codelink/internal/hooks"
 	"codelink/internal/launch"
 	"codelink/internal/share"
+
+	"github.com/wailsapp/wails/v3/pkg/application"
 )
 
 func hookError(msg string) hooks.Event { return hooks.Event{Kind: "error", Message: msg} }
@@ -48,6 +51,8 @@ type Snapshot struct {
 	// GetStarted is set when only a key is missing: Settings opens on
 	// "Paste your API key".
 	GetStarted *app.KeyNeed `json:"getStarted"`
+	// Tools are Claude Code's and Codex's installs.
+	Tools []app.ToolView `json:"tools"`
 }
 
 // Load is the saved settings with their view, the status and the platform.
@@ -64,6 +69,7 @@ func (s *Settings) Load() Snapshot {
 		Activity:    s.app.Activity.Entries(),
 		Path:        s.app.Path,
 		GetStarted:  getStarted(&cfg),
+		Tools:       s.Tools(),
 	}
 }
 
@@ -82,21 +88,6 @@ func (s *Settings) Status() app.Status { return s.app.Status() }
 // Describe is the view of a draft (after an edit the page made itself).
 func (s *Settings) Describe(draft config.Config) app.View { return s.app.Describe(draft) }
 
-// SetRole points a role at a model by its picker tag ("" = same as main / none).
-func (s *Settings) SetRole(draft config.Config, slot app.Slot, tag string) app.View {
-	return s.app.EditSetRole(draft, slot, tag)
-}
-
-// SetEnabled ticks or unticks a provider's model.
-func (s *Settings) SetEnabled(draft config.Config, tag string, on bool) app.View {
-	return s.app.EditSetEnabled(draft, tag, on)
-}
-
-// RenameModel changes the name sessions see for a model.
-func (s *Settings) RenameModel(draft config.Config, old, name string) app.View {
-	return s.app.EditRenameModel(draft, old, name)
-}
-
 // AddProvider adds a provider.
 func (s *Settings) AddProvider(draft config.Config) app.View { return s.app.EditAddBackend(draft) }
 
@@ -110,10 +101,89 @@ func (s *Settings) RemoveProvider(draft config.Config, id string) app.View {
 	return s.app.EditRemoveBackend(draft, id)
 }
 
-// Probe tests a provider as the page has it (unsaved URL and key).
-func (s *Settings) Probe(ctx context.Context, b config.Backend) core.Probe {
-	return s.app.Probe(ctx, b)
+// Probe tests a provider as the draft has it (unsaved URL and key) and
+// syncs its models into the draft.
+func (s *Settings) Probe(ctx context.Context, draft config.Config, id string) app.ProbeView {
+	return s.app.EditProbe(ctx, draft, id)
 }
+
+// SetDefaultModel sets the default model ("" = the server's recommendation).
+func (s *Settings) SetDefaultModel(draft config.Config, id string) app.View {
+	return s.app.EditDefaultModel(draft, id)
+}
+
+// Tools are Claude Code's and Codex's installs.
+func (s *Settings) Tools() []app.ToolView {
+	var out []app.ToolView
+	for _, t := range launch.Tools {
+		out = append(out, s.app.ToolView(t))
+	}
+	return out
+}
+
+// Install installs ("install") or updates ("update") a tool, showing its
+// progress window.
+func (s *Settings) Install(tool launch.Tool, verb app.MenuAction) app.JobView {
+	return s.gui.OpenInstall(tool, verb)
+}
+
+// Job is a tool's current or last install or update.
+func (s *Settings) Job(tool launch.Tool) app.JobView { return s.app.Job(tool) }
+
+// CancelJob stops it.
+func (s *Settings) CancelJob(tool launch.Tool) { s.app.CancelJob(tool) }
+
+// LaunchView is what a tool's launch window shows.
+func (s *Settings) LaunchView(tool launch.Tool) app.LaunchView { return s.app.LaunchView(tool) }
+
+// ChooseFolder asks for a launch folder; "" when cancelled.
+func (s *Settings) ChooseFolder(tool launch.Tool, current string) string {
+	return s.gui.chooseFolder(tool, current)
+}
+
+// LaunchResult is a launch's answer: "" or the problem in plain words.
+type LaunchResult struct {
+	Error string `json:"error"`
+	// Missing: the CLI isn't installed (the window offers Install).
+	Missing bool `json:"missing"`
+}
+
+// Launch starts a tool with the window's choices and hides the window.
+func (s *Settings) Launch(tool launch.Tool, opts app.LaunchOptions) LaunchResult {
+	err := s.app.Launch(tool, opts)
+	var missing *app.MissingCLIError
+	switch {
+	case err == nil:
+		if w := s.gui.launch[tool]; w != nil {
+			w.Hide()
+		}
+		return LaunchResult{}
+	case errors.As(err, &missing):
+		return LaunchResult{Error: err.Error(), Missing: true}
+	case errors.Is(err, app.ErrNotConfigured):
+		return LaunchResult{Error: "There are no models yet. Open Settings and add a provider (or paste your API key)."}
+	}
+	return LaunchResult{Error: upperFirst(err.Error())}
+}
+
+// OpenLaunch shows a tool's launch window.
+func (s *Settings) OpenLaunch(tool launch.Tool) { s.gui.OpenLaunch(tool) }
+
+// CloseWindow hides a tool's launch or install window ("launch" / "install").
+func (s *Settings) CloseWindow(kind string, tool launch.Tool) {
+	var w *application.WebviewWindow
+	if kind == "install" {
+		w = s.gui.install[tool]
+	} else {
+		w = s.gui.launch[tool]
+	}
+	if w != nil {
+		w.Hide()
+	}
+}
+
+// OpenSettings shows Settings (from a launch window).
+func (s *Settings) OpenSettings() { s.gui.OpenSettings() }
 
 // TestOCR checks a PaddleOCR URL.
 func (s *Settings) TestOCR(ctx context.Context, url string) app.CheckResult {

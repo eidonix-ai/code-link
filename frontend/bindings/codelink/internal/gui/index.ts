@@ -7,6 +7,7 @@ export {
 };
 
 export type {
+    LaunchResult,
     Platform,
     Snapshot
 } from "./models.js";

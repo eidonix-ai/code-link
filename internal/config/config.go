@@ -48,6 +48,19 @@ type Backend struct {
 	Kind    BackendKind `json:"kind"`
 	BaseURL string      `json:"baseURL"`
 	APIKey  string      `json:"apiKey,omitempty"`
+	// Recommended are the models a gateway's operator recommends per role
+	// (upstream names, from its /v1/capabilities), kept from the last sync.
+	Recommended *Recommended `json:"recommended,omitempty"`
+}
+
+// Recommended are upstream model names per role.
+type Recommended struct {
+	Main     string `json:"main,omitempty"`
+	Opus     string `json:"opus,omitempty"`
+	Small    string `json:"small,omitempty"`
+	Decision string `json:"decision,omitempty"`
+	Vision   string `json:"vision,omitempty"`
+	Codex    string `json:"codex,omitempty"`
 }
 
 // Model is a model on a backend.
@@ -146,6 +159,21 @@ type Launch struct {
 	PermissionMode string   `json:"permissionMode,omitempty"`
 	OpenAtLogin    bool     `json:"openAtLogin,omitempty"`
 	RecentFolders  []string `json:"recentFolders,omitempty"`
+	// DefaultModel is the user's default model id; "" = the server's
+	// recommendation.
+	DefaultModel string `json:"defaultModel,omitempty"`
+	// Last are the choices of the last launch per tool ("claude", "codex").
+	Last map[string]LaunchChoice `json:"last,omitempty"`
+}
+
+// LaunchChoice is what a launch window chose.
+type LaunchChoice struct {
+	Model string `json:"model,omitempty"`
+	// Heavy (Opus / Fable) and Background (Haiku) are Claude Code's other
+	// tiers; "" = the same as Model.
+	Heavy      string `json:"heavy,omitempty"`
+	Background string `json:"background,omitempty"`
+	Folder     string `json:"folder,omitempty"`
 }
 
 type Config struct {
