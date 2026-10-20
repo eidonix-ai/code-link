@@ -180,14 +180,14 @@ private enum A {
            {"type":"image_url","image_url":{"url":"data:image/png;base64,\#(png)","detail":"low"}}]}]
         """#
         let describer = CoreImageDescriber()
-        try await CoreHarness.run(hooks: EngineHooks(imageDescriber: describer), configure: { $0.roles.vision = "Big" }, backend: okChat) { h in
+        try await CoreHarness.run(hooks: EngineHooks(imageDescriber: describer), configure: { $0.roles.vision = "Big"; $0.models[0].vision = false }, backend: okChat) { h in
             _ = try await h.chat(chatBody(messages: messages))
             let parts = h.backend.lastChat?["messages"]?[0]?["content"]?.array ?? []
             #expect(parts.map { $0.type ?? "" } == ["text", "text"])
             #expect(parts[1]["text"]?.string == "[image: a cat on a mat]")
             #expect(describer.calls == 1)
         }
-        try await CoreHarness.run(backend: okChat) { h in
+        try await CoreHarness.run(configure: { $0.models[0].vision = false }, backend: okChat) { h in
             _ = try await h.chat(chatBody(messages: messages))
             #expect(h.backend.lastChat?["messages"]?[0]?["content"]?[1]?["text"]?.string
                     == "[image omitted: GLM has no vision and no vision model is configured]")

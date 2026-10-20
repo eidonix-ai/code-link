@@ -662,7 +662,7 @@ private let okJSON: @Sendable (StubBackend.Seen, Int) -> StubBackend.Reply = { _
          {"type":"function_call_output","call_id":"c1","output":[{"type":"input_image","image_url":"data:image/png;base64,\#(png)"}]}]
         """#
         let describer = CoreImageDescriber()
-        try await CoreHarness.run(hooks: EngineHooks(imageDescriber: describer), configure: { $0.roles.vision = "Big" }, backend: okStream) { h in
+        try await CoreHarness.run(hooks: EngineHooks(imageDescriber: describer), configure: { $0.roles.vision = "Big"; $0.models[0].vision = false }, backend: okStream) { h in
             _ = try await h.responses(responsesBody(input: input))
             let msgs = h.backend.lastChat?["messages"]?.array ?? []
             #expect(msgs[0]["content"]?[0]?["text"]?.string == "what is this")
@@ -679,7 +679,7 @@ private let okJSON: @Sendable (StubBackend.Seen, Int) -> StubBackend.Reply = { _
 
     @Test func imagesWithoutAnyVisionAreOmittedWithANote() async throws {
         let input = #"[{"role":"user","content":[{"type":"input_image","image_url":"data:image/png;base64,AAAA"}]}]"#
-        try await CoreHarness.run(backend: okStream) { h in
+        try await CoreHarness.run(configure: { $0.models[0].vision = false }, backend: okStream) { h in
             _ = try await h.responses(responsesBody(input: input))
             #expect(h.backend.lastChat?["messages"]?[0]?["content"]?.string
                     == "[image omitted: GLM has no vision and no vision model is configured]")

@@ -16,11 +16,35 @@ private func reply(_ content: String) -> ChatResult {
     let call = try #require(caller.calls.first)
     #expect(call.model == vmodel)
     let expected = json("""
-    {"max_tokens":600,"messages":[{"role":"user","content":[
+    {"max_tokens":1500,"chat_template_kwargs":{"enable_thinking":false},"messages":[{"role":"user","content":[
       {"type":"image_url","image_url":{"url":"data:image/png;base64,AQIDBA=="}},
       {"type":"text","text":"Describe this image in detail for someone who cannot see it, including any text it contains."}]}]}
     """)
     #expect(JSONValue.object(call.body) == expected)
+}
+
+/// A server that refuses thinking off, or a reply that is all thinking, is
+/// asked again with thinking on and a larger budget.
+@Test func describeRetriesWithThinkingOn() async throws {
+    let caller = FakeModelCaller { i, _, _ in
+        if i == 0 { return ChatResult(status: 200, json: .makeObject(["choices": .array([.makeObject(["message": .makeObject(["content": .null])])])])) }
+        return reply("A red square.")
+    }
+    let d = ModelImageDescriber(model: vmodel, caller: caller)
+    #expect(await d.describe(Data([1]), mediaType: "image/png") == "A red square.")
+    #expect(caller.calls.count == 2)
+    let second = try #require(caller.calls.last)
+    #expect(second.body["chat_template_kwargs"] == nil)
+    #expect(second.body["max_tokens"] == .number(8192))
+}
+
+@Test func describeUsesTheModelsThinkingOff() async throws {
+    let m = Model(id: "G", backendID: "b", upstreamModel: "g", vision: true, thinkingOff: .makeObject(["reasoning_effort": .string("low")]))
+    let caller = FakeModelCaller(result: reply("ok"))
+    _ = await ModelImageDescriber(model: m, caller: caller).describe(Data([1]), mediaType: "image/png")
+    let call = try #require(caller.calls.first)
+    #expect(call.body["reasoning_effort"] == .string("low"))
+    #expect(call.body["chat_template_kwargs"] == nil)
 }
 
 @Test func describeCachesBySHA256() async {
@@ -35,10 +59,11 @@ private func reply(_ content: String) -> ChatResult {
 }
 
 @Test func describeFailuresAreNilAndNotCached() async {
+    // Each describe asks twice (thinking off, then on).
     let flaky = FakeModelCaller { i, _, _ in
         if i == 0 { throw FakeError() }
-        if i == 1 { return ChatResult(status: 500, json: .null) }
-        if i == 2 { return reply("  ") }
+        if i < 3 { return ChatResult(status: 500, json: .null) }
+        if i < 6 { return reply("  ") }
         return reply("<think>hmm</think>A dog.")
     }
     let d = ModelImageDescriber(model: vmodel, caller: flaky)

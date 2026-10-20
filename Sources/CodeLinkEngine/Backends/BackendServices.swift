@@ -71,6 +71,22 @@ enum BackendProber {
         return !(first["top_logprobs"]?.array ?? []).isEmpty || first["logprob"] != nil
     }
 
+    /// An 8×8 red PNG for the vision probe.
+    static let probeImage = "iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAIAAABLbSncAAAAEUlEQVR42mP4z8CAFTEMLQkAKP8/wc53yE8AAAAASUVORK5CYII="
+
+    /// Whether a model reads images: a 1-token request with a tiny image. A
+    /// text-only server refuses it (vLLM and SGLang answer 400); nil when the
+    /// server could not be reached.
+    static func vision(_ target: BackendTarget, client: UpstreamClient, timeout: Duration) async -> Bool? {
+        let body: JSON = ["messages": [["role": "user", "content": [
+            ["type": "image_url", "image_url": ["url": .string("data:image/png;base64," + probeImage)]],
+            ["type": "text", "text": "Hi"]]]], "max_tokens": 1, "stream": false]
+        guard let resp = try? await client.send(target.chatRequest(body, stream: false), headerTimeout: timeout),
+              (try? await resp.collect(limit: 4 << 20)) != nil else { return nil }
+        if resp.status >= 500 || resp.status == 429 { return nil }
+        return (200..<300).contains(resp.status)
+    }
+
     static func probe(_ backend: Backend, secrets: any SecretStore, client: UpstreamClient) async -> BackendProbe {
         let apiKey = backend.apiKeyRef.flatMap { secrets.secret($0) }
         let started = ContinuousClock.now
@@ -82,9 +98,9 @@ enum BackendProber {
         }
         let latency = Int((ContinuousClock.now - started) / .milliseconds(1))
         guard backend.kind == .openAICompatible else { return BackendProbe(reachable: true, models: models, latencyMS: latency) }
-        // Logprobs for the first 16 models, four at a time.
-        let probed = await withTaskGroup(of: (Int, Bool?).self) { group -> [Int: Bool?] in
-            var out: [Int: Bool?] = [:]
+        // Logprobs and vision for the first 16 models, four at a time.
+        let probed = await withTaskGroup(of: (Int, Bool?, Bool?).self) { group -> [Int: (Bool?, Bool?)] in
+            var out: [Int: (Bool?, Bool?)] = [:]
             var next = 0
             let limit = min(models.count, 16)
             func add() {
@@ -93,14 +109,18 @@ enum BackendProber {
                 next += 1
                 let target = BackendTarget(model: Model(id: m.upstreamModel, backendID: backend.id, upstreamModel: m.upstreamModel),
                                            backend: backend, apiKey: apiKey)
-                group.addTask { (i, await logprobs(target, client: client, timeout: .seconds(30))) }
+                group.addTask {
+                    async let l = logprobs(target, client: client, timeout: .seconds(30))
+                    async let v = vision(target, client: client, timeout: .seconds(30))
+                    return (i, await l, await v)
+                }
             }
             for _ in 0..<4 { add() }
-            while let (i, v) = await group.next() { out[i] = v; add() }
+            while let (i, l, v) = await group.next() { out[i] = (l, v); add() }
             return out
         }
         var result = models
-        for (i, v) in probed { result[i].logprobs = v }
+        for (i, v) in probed { result[i].logprobs = v.0; result[i].vision = v.1 }
         return BackendProbe(reachable: true, models: result, latencyMS: latency)
     }
 }
@@ -124,5 +144,38 @@ actor ContextWindows {
         let w = models?.first { $0.upstreamModel == target.model.upstreamModel }?.contextWindow
         known[key] = (w, .now)
         return w
+    }
+}
+
+/// Whether each model reads images, for models configured without `vision`:
+/// probed once, on the first request that carries an image
+/// (BackendProber.vision); an unreachable server is asked again after five
+/// minutes and counts as no vision meanwhile.
+actor VisionSupport {
+    private var known: [String: (vision: Bool?, at: ContinuousClock.Instant)] = [:]
+    private let client: UpstreamClient
+
+    init(client: UpstreamClient) { self.client = client }
+
+    func hasVision(_ target: BackendTarget, for request: JSON) async -> Bool {
+        if let v = target.model.vision { return v }
+        if target.isAnthropic { return true }
+        guard Self.containsImage(request) else { return false }
+        let key = target.backend.id + "|" + target.backend.baseURL.absoluteString + "|" + target.model.upstreamModel
+        if let k = known[key], k.vision != nil || ContinuousClock.now - k.at < .seconds(300) { return k.vision ?? false }
+        let v = await BackendProber.vision(target, client: client, timeout: .seconds(20))
+        known[key] = (v, .now)
+        return v ?? false
+    }
+
+    /// An image block in any of the three APIs' shapes.
+    static func containsImage(_ v: JSON) -> Bool {
+        switch v {
+        case .array(let a): return a.contains(where: containsImage)
+        case .object(let o):
+            if let t = o["type"]?.string, t == "image" || t == "image_url" || t == "input_image" { return true }
+            return o.contains { containsImage($0.1) }
+        default: return false
+        }
     }
 }

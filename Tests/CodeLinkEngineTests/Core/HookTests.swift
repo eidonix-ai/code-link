@@ -138,7 +138,7 @@ private let okReply: @Sendable (StubBackend.Seen, Int) -> StubBackend.Reply = { 
 
     @Test func describedForAModelWithoutVision() async throws {
         let describer = CoreImageDescriber()
-        try await CoreHarness.run(hooks: EngineHooks(imageDescriber: describer), configure: { $0.roles.vision = "Big" }, backend: okReply) { h in
+        try await CoreHarness.run(hooks: EngineHooks(imageDescriber: describer), configure: { $0.roles.vision = "Big"; $0.models[0].vision = false }, backend: okReply) { h in
             let body = messagesBody(messages: #"[{"role":"user","content":[{"type":"text","text":"what is it"},\#(image),\#(image)]}]"#)
             let status = try await h.messages(body).status
             #expect(status == 200)
@@ -150,7 +150,7 @@ private let okReply: @Sendable (StubBackend.Seen, Int) -> StubBackend.Reply = { 
 
     @Test func omittedWithoutAVisionRole() async throws {
         let describer = CoreImageDescriber()
-        try await CoreHarness.run(hooks: EngineHooks(imageDescriber: describer), backend: okReply) { h in
+        try await CoreHarness.run(hooks: EngineHooks(imageDescriber: describer), configure: { $0.models[0].vision = false }, backend: okReply) { h in
             _ = try await h.messages(messagesBody(messages: #"[{"role":"user","content":[\#(image)]}]"#))
             #expect(userTexts(h.backend.lastChat) == ["[image omitted: GLM has no vision and no vision model is configured]"])
             #expect(describer.calls == 0)
@@ -167,9 +167,30 @@ private let okReply: @Sendable (StubBackend.Seen, Int) -> StubBackend.Reply = { 
         }
     }
 
+    /// A model configured without `vision` is asked once, on the first
+    /// request with an image: one that reads it gets images directly, one
+    /// that refuses it gets descriptions.
+    @Test func visionIsDetectedOnTheFirstImage() async throws {
+        for reads in [true, false] {
+            let describer = CoreImageDescriber()
+            try await CoreHarness.run(hooks: EngineHooks(imageDescriber: describer), configure: { $0.roles.vision = "Big" }, backend: { seen, _ in
+                if seen.json?["max_tokens"] == 1 { return reads ? .json(200, Chunks.completion(content: "H")) : .json(400, #"{"error":{"message":"not a multimodal model"}}"#) }
+                return .json(200, Chunks.completion(content: "ok"))
+            }) { h in
+                _ = try await h.messages(messagesBody(messages: #"[{"role":"user","content":[{"type":"text","text":"hi"}]}]"#))
+                #expect(h.backend.chatRequests.count == 1) // no image, no probe
+                for _ in 0..<2 { _ = try await h.messages(messagesBody(messages: #"[{"role":"user","content":[\#(image)]}]"#)) }
+                #expect(h.backend.chatRequests.count == 4) // probed once
+                let first = h.backend.lastChat?["messages"]?[0]?["content"]?.array?.first
+                #expect(reads ? first?.type == "image_url" : userTexts(h.backend.lastChat) == ["[image: a cat on a mat]"])
+                #expect(describer.calls == (reads ? 0 : 2)) // one per request
+            }
+        }
+    }
+
     @Test func describedInsideToolResults() async throws {
         let describer = CoreImageDescriber("a red button")
-        try await CoreHarness.run(hooks: EngineHooks(imageDescriber: describer), configure: { $0.roles.vision = "Big" }, backend: okReply) { h in
+        try await CoreHarness.run(hooks: EngineHooks(imageDescriber: describer), configure: { $0.roles.vision = "Big"; $0.models[0].vision = false }, backend: okReply) { h in
             _ = try await h.messages(messagesBody(messages: #"[{"role":"assistant","content":[{"type":"tool_use","id":"t","name":"Shot","input":{}}]},{"role":"user","content":[{"type":"tool_result","tool_use_id":"t","content":[{"type":"text","text":"shot taken"},\#(image)]}]}]"#))
             let m = h.backend.lastChat?["messages"]?.array ?? []
             #expect(m[1]["content"]?.string == "shot taken")

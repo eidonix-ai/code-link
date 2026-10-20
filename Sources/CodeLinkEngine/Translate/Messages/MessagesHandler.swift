@@ -52,7 +52,7 @@ enum MessagesHandler {
 
         let media = MediaContext(reader: env.hooks.documentReader,
                                  describer: env.config.roles.vision != nil ? env.hooks.imageDescriber : nil,
-                                 modelHasVision: model.vision ?? false, modelID: model.id, fetcher: env.client, log: env.log)
+                                 modelHasVision: await env.vision.hasVision(target, for: req), modelID: model.id, fetcher: env.client, log: env.log)
         let processed = await MediaPreprocessor.process(req, media)
         if Task.isCancelled { return logged(.anthropicError(.api(499, "cancelled")), model: model.id) }
 

@@ -74,13 +74,14 @@ extension EngineConfig {
             if let probed {
                 if models[existing].contextWindow == nil { models[existing].contextWindow = probed.contextWindow }
                 if models[existing].logprobs == nil { models[existing].logprobs = probed.logprobs }
+                if models[existing].vision == nil { models[existing].vision = probed.vision }
             }
             return models[existing].id
         }
         var id = choice.upstream
         if models.contains(where: { $0.id == id }) { id = "\(choice.upstream) (\(choice.backendID))" }
         models.append(Model(id: id, backendID: choice.backendID, upstreamModel: choice.upstream,
-                            contextWindow: probed?.contextWindow, logprobs: probed?.logprobs))
+                            contextWindow: probed?.contextWindow, vision: probed?.vision, logprobs: probed?.logprobs))
         return id
     }
 
@@ -202,7 +203,7 @@ enum RoutingChoices {
             if !enabledOnly {
                 for p in probes[b.id]?.models ?? [] where !items.contains(where: { $0.choice.upstream == p.upstreamModel }) {
                     items.append(ChoiceItem(choice: ModelChoice(backendID: b.id, upstream: p.upstreamModel), modelID: nil,
-                                            contextWindow: p.contextWindow, logprobs: p.logprobs, vision: nil))
+                                            contextWindow: p.contextWindow, logprobs: p.logprobs, vision: p.vision))
                 }
             }
             return items.isEmpty ? nil : ChoiceGroup(backendID: b.id, items: items)

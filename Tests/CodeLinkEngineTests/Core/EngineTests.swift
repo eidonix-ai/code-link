@@ -110,10 +110,17 @@ private final class CapturingFactory: EngineHooksFactory {
         }
     }
 
-    @Test func probeListsModelsWindowsAndLogprobs() async throws {
+    @Test func probeListsModelsWindowsLogprobsAndVision() async throws {
         try await CoreHarness.run(backend: { seen, _ in
             let model = seen.json?["model"]?.string
-            #expect(seen.json?["logprobs"] == true && seen.json?["top_logprobs"] == 2 && seen.json?["max_tokens"] == 1)
+            #expect(seen.json?["max_tokens"] == 1)
+            if seen.json?["logprobs"] == nil { // the vision probe
+                let part = seen.json?["messages"]?[0]?["content"]?[0]
+                #expect(part?["image_url"]?["url"]?.string?.hasPrefix("data:image/png;base64,") == true)
+                return model == "glm-upstream" ? .json(400, #"{"error":{"message":"not a multimodal model"}}"#)
+                                               : .json(200, Chunks.completion(content: "H"))
+            }
+            #expect(seen.json?["logprobs"] == true && seen.json?["top_logprobs"] == 2)
             if model == "glm-upstream" {
                 return .json(200, #"{"choices":[{"index":0,"message":{"role":"assistant","content":"H"},"logprobs":{"content":[{"token":"H","logprob":-0.1,"top_logprobs":[{"token":"H","logprob":-0.1},{"token":"Hi","logprob":-2.3}]}]},"finish_reason":"length"}]}"#)
             }
@@ -121,8 +128,8 @@ private final class CapturingFactory: EngineHooksFactory {
         }) { h in
             let p = await h.engine.probe(Backend(id: "stub", baseURL: h.backend.baseURL, apiKeyRef: "stub-key"))
             #expect(p.reachable && p.error == nil && p.latencyMS != nil)
-            #expect(p.models == [ProbedModel(upstreamModel: "glm-upstream", contextWindow: 131072, logprobs: true),
-                                 ProbedModel(upstreamModel: "other", contextWindow: 8192, logprobs: false)])
+            #expect(p.models == [ProbedModel(upstreamModel: "glm-upstream", contextWindow: 131072, logprobs: true, vision: false),
+                                 ProbedModel(upstreamModel: "other", contextWindow: 8192, logprobs: false, vision: true)])
             #expect(h.backend.requests.first?.headers["authorization"] == "Bearer sk-stub-secret")
             let down = await h.engine.probe(Backend(id: "x", baseURL: URL(string: "http://127.0.0.1:1/v1")!))
             #expect(!down.reachable && down.error != nil)

@@ -17,8 +17,9 @@ public struct ProbedModel: Sendable, Equatable {
     public var upstreamModel: String
     public var contextWindow: Int?
     public var logprobs: Bool?
-    public init(upstreamModel: String, contextWindow: Int? = nil, logprobs: Bool? = nil) {
-        self.upstreamModel = upstreamModel; self.contextWindow = contextWindow; self.logprobs = logprobs
+    public var vision: Bool?
+    public init(upstreamModel: String, contextWindow: Int? = nil, logprobs: Bool? = nil, vision: Bool? = nil) {
+        self.upstreamModel = upstreamModel; self.contextWindow = contextWindow; self.logprobs = logprobs; self.vision = vision
     }
 }
 
@@ -45,6 +46,7 @@ public final class Engine: Sendable {
     private let responses: any ResponsesHandler
     private let client = UpstreamClient()
     private let contextWindows: ContextWindows
+    private let vision: VisionSupport
     private let environment: EnvironmentBox
 
     private struct Life: Sendable {
@@ -74,10 +76,11 @@ public final class Engine: Sendable {
         self.tuning = tuning
         self.responses = responses
         self.contextWindows = ContextWindows(client: client)
+        self.vision = VisionSupport(client: client)
         self.life = Mutex(Life(config: config))
         self.environment = EnvironmentBox(RequestEnvironment(
             config: config, secrets: secrets, log: log, client: client, tuning: tuning,
-            contextWindows: contextWindows, hooksFactory: hooksFactory, responses: responses))
+            contextWindows: contextWindows, vision: vision, hooksFactory: hooksFactory, responses: responses))
     }
 
     /// Starts the server on 127.0.0.1:`config.port` (0 = any free port).
@@ -122,7 +125,7 @@ public final class Engine: Sendable {
         await serialized { [self] in
             environment.set(RequestEnvironment(
                 config: config, secrets: secrets, log: log, client: client, tuning: tuning,
-                contextWindows: contextWindows, hooksFactory: hooksFactory, responses: responses))
+                contextWindows: contextWindows, vision: vision, hooksFactory: hooksFactory, responses: responses))
             let (old, oldPort) = life.withLock { l in
                 l.config = config
                 return (l.server, l.serverConfigPort)

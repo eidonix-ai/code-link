@@ -22,16 +22,18 @@ final class RequestEnvironment: Sendable {
     let log: any EventLog
     let tuning: EngineTuning
     let contextWindows: ContextWindows
+    let vision: VisionSupport
     let responses: any ResponsesHandler
 
     init(config: EngineConfig, secrets: any SecretStore, log: any EventLog, client: UpstreamClient, tuning: EngineTuning,
-         contextWindows: ContextWindows, hooksFactory: any EngineHooksFactory, responses: any ResponsesHandler) {
+         contextWindows: ContextWindows, vision: VisionSupport, hooksFactory: any EngineHooksFactory, responses: any ResponsesHandler) {
         self.config = config
         self.routing = Routing(config: config, secrets: secrets)
         self.client = client
         self.log = log
         self.tuning = tuning
         self.contextWindows = contextWindows
+        self.vision = vision
         self.responses = responses
         let caller = EngineModelCaller(routing: routing, client: client, headerTimeout: tuning.headerTimeout(config))
         self.caller = caller

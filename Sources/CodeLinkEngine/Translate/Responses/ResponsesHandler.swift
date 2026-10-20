@@ -49,7 +49,7 @@ enum ResponsesRoute {
         // Documents and images.
         let media = MediaContext(reader: env.hooks.documentReader,
                                  describer: env.config.roles.vision != nil ? env.hooks.imageDescriber : nil,
-                                 modelHasVision: model.vision ?? false, modelID: model.id, fetcher: env.client, log: env.log)
+                                 modelHasVision: await env.vision.hasVision(target, for: req), modelID: model.id, fetcher: env.client, log: env.log)
         var input = req["input"]
         if let items = input?.array { input = .array(await OpenAIMedia.process(responsesInput: items, media)) }
         if Task.isCancelled { return logged(OpenAIError.server(499, "cancelled", "cancelled"), model: model.id) }

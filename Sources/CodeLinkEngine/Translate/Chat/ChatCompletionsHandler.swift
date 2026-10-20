@@ -35,10 +35,10 @@ enum ChatCompletionsHandler {
             return logged(.notFound("model \(model.id) has no configured backend (\(model.backendID))"), model: model.id)
         }
 
-        // Documents and images. A Claude model sees images unless told not to.
+        // Documents and images; images go to the model when it reads them.
         let media = MediaContext(reader: env.hooks.documentReader,
                                  describer: env.config.roles.vision != nil ? env.hooks.imageDescriber : nil,
-                                 modelHasVision: model.vision ?? target.isAnthropic, modelID: model.id,
+                                 modelHasVision: await env.vision.hasVision(target, for: req), modelID: model.id,
                                  fetcher: env.client, log: env.log)
         var body = req
         body["messages"] = .array(await OpenAIMedia.process(chatMessages: messages, media))
