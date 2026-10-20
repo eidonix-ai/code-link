@@ -562,3 +562,37 @@ func TestFindsCodexWhereCodeLinkAndOpenAIInstallIt(t *testing.T) {
 		t.Errorf("mac: %+v", f)
 	}
 }
+
+func TestASessionsModelsComeFromTheLaunchWindow(t *testing.T) {
+	c := cfg("GLM-5.3", "Big", "Tiny", "Coder", ip(1_048_576), nil)
+	c.Models = append(c.Models, config.Model{ID: "Qwen", BackendID: "cn3", Upstream: "qwen", ContextWindow: ip(131_072), AutoCompactAt: ip(100_000)})
+	x := ctx(c, "auto")
+	x.Model, x.Heavy, x.Background = "Qwen", "Big", ""
+	cmd := render(t, ClaudeCode, x, POSIX)
+	for _, want := range []string{"ANTHROPIC_MODEL=Qwen ", "ANTHROPIC_DEFAULT_SONNET_MODEL=Qwen ", "ANTHROPIC_DEFAULT_SONNET_MODEL_NAME=Qwen ",
+		"ANTHROPIC_DEFAULT_OPUS_MODEL=Big ", "ANTHROPIC_DEFAULT_OPUS_MODEL_NAME=Big ", "ANTHROPIC_DEFAULT_FABLE_MODEL=Big ", "ANTHROPIC_DEFAULT_FABLE_MODEL_NAME=Big ",
+		"ANTHROPIC_DEFAULT_HAIKU_MODEL=Qwen ", "ANTHROPIC_DEFAULT_HAIKU_MODEL_NAME=Qwen ", "ANTHROPIC_SMALL_FAST_MODEL=Qwen ",
+		"CLAUDE_CODE_MAX_CONTEXT_TOKENS=131072 ", "CLAUDE_CODE_AUTO_COMPACT_WINDOW=100000 "} {
+		if !strings.Contains(cmd, want) {
+			t.Errorf("missing %q:\n%s", want, cmd)
+		}
+	}
+	// The configured roles don't leak into a session with its own model.
+	if strings.Contains(cmd, "Tiny") || strings.Contains(cmd, "GLM-5.3") {
+		t.Errorf("roles leaked:\n%s", cmd)
+	}
+	x.Background = "Tiny"
+	if cmd := render(t, ClaudeCode, x, PowerShell); !strings.Contains(cmd, "$env:ANTHROPIC_SMALL_FAST_MODEL = 'Tiny'") || !strings.Contains(cmd, "$env:ANTHROPIC_DEFAULT_FABLE_MODEL = 'Big'") {
+		t.Errorf("%s", cmd)
+	}
+	cx := render(t, Codex, x, POSIX)
+	if !strings.Contains(cx, `-c 'model="Qwen"'`) || !strings.Contains(cx, "model_context_window=131072") {
+		t.Errorf("codex:\n%s", cx)
+	}
+	// A session model works even before roles exist.
+	empty := config.Default()
+	empty.Models = []config.Model{{ID: "m", BackendID: "llm.eidonix.com", Upstream: "m"}}
+	if _, err := Render(ClaudeCode, Context{Config: &empty, Model: "m"}, POSIX); err != nil {
+		t.Error(err)
+	}
+}

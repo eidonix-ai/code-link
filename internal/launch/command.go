@@ -23,6 +23,10 @@ type Context struct {
 	ClaudeSettingsPath string
 	// PermissionMode for Claude Code; "" = auto.
 	PermissionMode string
+	// Model is this session's model (the launch window's choice); "" = the
+	// configured roles. With a Model, Heavy (Opus / Fable) and Background
+	// (Haiku, small/fast) default to it.
+	Model, Heavy, Background string
 }
 
 // Shell is the language a command is written in.
@@ -70,7 +74,7 @@ const (
 
 // Build is the environment and arguments for a tool (docs/DESIGN.md §3).
 func Build(t Tool, c Context) (Invocation, error) {
-	if c.Config == nil || c.Config.Roles.Main == "" {
+	if c.Config == nil || (c.Config.Roles.Main == "" && c.Model == "") {
 		return Invocation{}, ErrNoMainModel
 	}
 	if t == Codex {
@@ -88,9 +92,10 @@ func or(s, fallback string) string {
 
 func claude(c Context) Invocation {
 	r := c.Config.Roles
-	main := r.Main
-	opus := or(r.Opus, main)
-	small := or(r.Small, main)
+	main, opus, small := r.Main, or(r.Opus, r.Main), or(r.Small, r.Main)
+	if c.Model != "" {
+		main, opus, small = c.Model, or(c.Heavy, c.Model), or(c.Background, c.Model)
+	}
 	env := []Var{
 		{"ANTHROPIC_BASE_URL", "http://127.0.0.1:" + strconv.Itoa(c.Port)},
 		{"ANTHROPIC_AUTH_TOKEN", c.Token},
@@ -122,7 +127,7 @@ func claude(c Context) Invocation {
 }
 
 func codex(c Context) Invocation {
-	model := or(c.Config.Roles.Codex, c.Config.Roles.Main)
+	model := or(c.Model, or(c.Config.Roles.Codex, c.Config.Roles.Main))
 	id := CodexProviderID
 	settings := []string{
 		"model=" + TOMLString(model),
