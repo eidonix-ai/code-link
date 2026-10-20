@@ -92,20 +92,21 @@ type MenuItem struct {
 	Label  string
 }
 
-// ToolMenu are a tool's tray items: "Install Claude Code…" while it is
-// missing; "Launch Claude Code…" when installed (or not checked yet), with
-// "Update Claude Code (2.1.296 → 2.1.304)" when an update is available and
-// code-link knows how to apply it.
-func ToolMenu(t launch.Tool, info tools.Info, checked bool) []MenuItem {
+// ToolMenu are a tool's tray items: "Launch Claude Code…" always (the
+// launch window offers Install while it is missing), plus a maintenance
+// item for the menu's lower group — "Install Claude Code…" while it is
+// missing, or "Update Claude Code (2.1.296 → 2.1.304)" when an update is
+// available and code-link knows how to apply it.
+func ToolMenu(t launch.Tool, info tools.Info, checked bool) (launchItem MenuItem, maintenance *MenuItem) {
 	name := t.DisplayName()
-	if checked && !info.Installed {
-		return []MenuItem{{t, ActInstall, "Install " + name + "…"}}
+	launchItem = MenuItem{t, ActLaunch, "Launch " + name + "…"}
+	switch {
+	case checked && !info.Installed:
+		maintenance = &MenuItem{t, ActInstall, "Install " + name + "…"}
+	case checked && info.UpdateAvailable && info.CanUpdate:
+		maintenance = &MenuItem{t, ActUpdate, "Update " + name + " (" + info.Version + " → " + info.Latest + ")"}
 	}
-	out := []MenuItem{{t, ActLaunch, "Launch " + name + "…"}}
-	if checked && info.UpdateAvailable && info.CanUpdate {
-		out = append(out, MenuItem{t, ActUpdate, "Update " + name + " (" + info.Version + " → " + info.Latest + ")"})
-	}
-	return out
+	return launchItem, maintenance
 }
 
 // ToolView is a tool's line in Settings and the launch window.

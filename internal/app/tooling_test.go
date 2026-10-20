@@ -76,24 +76,31 @@ func TestToolMenuStates(t *testing.T) {
 		name    string
 		info    tools.Info
 		checked bool
-		want    []string
+		upkeep  string // "" = none
 	}{
-		{"not checked yet", tools.Info{}, false, []string{"launch: Launch Claude Code…"}},
-		{"missing", tools.Info{Installed: false, Method: tools.Native}, true, []string{"install: Install Claude Code…"}},
+		{"not checked yet", tools.Info{}, false, ""},
+		{"missing", tools.Info{Installed: false, Method: tools.Native}, true, "install: Install Claude Code…"},
 		{"outdated", tools.Info{Installed: true, Version: "2.1.296", Latest: "2.1.304", UpdateAvailable: true, CanUpdate: true, Method: tools.Native}, true,
-			[]string{"launch: Launch Claude Code…", "update: Update Claude Code (2.1.296 → 2.1.304)"}},
-		{"current", tools.Info{Installed: true, Version: "2.1.304", Latest: "2.1.304", CanUpdate: true}, true, []string{"launch: Launch Claude Code…"}},
-		{"unknown method", tools.Info{Installed: true, Version: "2.1.296", Latest: "2.1.304", UpdateAvailable: true, CanUpdate: false, Method: tools.Unknown}, true,
-			[]string{"launch: Launch Claude Code…"}},
-		{"offline", tools.Info{Installed: true, Version: "2.1.296", CanUpdate: true}, true, []string{"launch: Launch Claude Code…"}},
+			"update: Update Claude Code (2.1.296 → 2.1.304)"},
+		{"current", tools.Info{Installed: true, Version: "2.1.304", Latest: "2.1.304", CanUpdate: true}, true, ""},
+		{"unknown method", tools.Info{Installed: true, Version: "2.1.296", Latest: "2.1.304", UpdateAvailable: true, CanUpdate: false, Method: tools.Unknown}, true, ""},
+		{"offline", tools.Info{Installed: true, Version: "2.1.296", CanUpdate: true}, true, ""},
 	}
 	for _, c := range cases {
-		if got := labels(ToolMenu(launch.ClaudeCode, c.info, c.checked)); !reflect.DeepEqual(got, c.want) {
-			t.Errorf("%s: %v", c.name, got)
+		l, m := ToolMenu(launch.ClaudeCode, c.info, c.checked)
+		if got := labels([]MenuItem{l}); !reflect.DeepEqual(got, []string{"launch: Launch Claude Code…"}) {
+			t.Errorf("%s: launch item %v", c.name, got)
+		}
+		got := ""
+		if m != nil {
+			got = labels([]MenuItem{*m})[0]
+		}
+		if got != c.upkeep {
+			t.Errorf("%s: maintenance %q, want %q", c.name, got, c.upkeep)
 		}
 	}
-	if got := labels(ToolMenu(launch.Codex, tools.Info{}, true)); got[0] != "install: Install Codex…" {
-		t.Error(got)
+	if _, m := ToolMenu(launch.Codex, tools.Info{}, true); m == nil || m.Label != "Install Codex…" {
+		t.Error(m)
 	}
 }
 

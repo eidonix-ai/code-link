@@ -203,13 +203,17 @@ func title(mac, win string) string {
 // icon for the status.
 func (g *GUI) updateTray(force bool) {
 	st := g.app.Status()
-	var items []app.MenuItem
+	var launches, upkeep []app.MenuItem
 	for _, t := range launch.Tools {
 		info, checked := g.app.ToolInfo(t)
-		items = append(items, app.ToolMenu(t, info, checked)...)
+		l, m := app.ToolMenu(t, info, checked)
+		launches = append(launches, l)
+		if m != nil {
+			upkeep = append(upkeep, *m)
+		}
 	}
 	sig := st.Line
-	for _, i := range items {
+	for _, i := range append(append([]app.MenuItem{}, launches...), upkeep...) {
 		sig += "|" + i.Label
 	}
 	g.mu.Lock()
@@ -236,10 +240,12 @@ func (g *GUI) updateTray(force bool) {
 	m.Clear()
 	m.Add(st.Line).SetEnabled(false)
 	m.AddSeparator()
-	for _, it := range items {
-		if it.Action == app.ActLaunch {
-			m.Add(it.Label).OnClick(func(*application.Context) { g.OpenLaunch(it.Tool) })
-		} else {
+	for _, it := range launches {
+		m.Add(it.Label).OnClick(func(*application.Context) { g.OpenLaunch(it.Tool) })
+	}
+	if len(upkeep) > 0 {
+		m.AddSeparator()
+		for _, it := range upkeep {
 			m.Add(it.Label).OnClick(func(*application.Context) { g.OpenInstall(it.Tool, it.Action) })
 		}
 	}
