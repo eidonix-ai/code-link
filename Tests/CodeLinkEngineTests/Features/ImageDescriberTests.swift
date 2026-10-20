@@ -16,7 +16,7 @@ private func reply(_ content: String) -> ChatResult {
     let call = try #require(caller.calls.first)
     #expect(call.model == vmodel)
     let expected = json("""
-    {"max_tokens":600,"temperature":0,"messages":[{"role":"user","content":[
+    {"max_tokens":600,"messages":[{"role":"user","content":[
       {"type":"image_url","image_url":{"url":"data:image/png;base64,AQIDBA=="}},
       {"type":"text","text":"Describe this image in detail for someone who cannot see it, including any text it contains."}]}]}
     """)

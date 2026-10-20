@@ -128,7 +128,7 @@ private func text(_ r: JSONValue?) -> String? { r?.feature(path: "content", 0, "
     let call = try #require(caller.calls.first)
     #expect(call.model == model)
     let expected = json("""
-    {"max_tokens":1,"temperature":0,"logprobs":true,"top_logprobs":20,
+    {"max_tokens":1,"logprobs":true,"top_logprobs":20,
      "continue_final_message":true,"add_generation_prompt":false,
      "messages":[{"role":"system","content":\(String(data: try JSONEncoder().encode(sysSeverity), encoding: .utf8)!)},
                  {"role":"user","content":"<transcript>ls</transcript>"},
@@ -260,4 +260,58 @@ private func text(_ r: JSONValue?) -> String? { r?.feature(path: "content", 0, "
 
 @Test func categorySanitizing() {
     #expect(DecisionHead.sanitizeCategory("  Force-Push: main! ") == "ForcePush main")
+}
+
+// MARK: Servers that refuse a prefill (Flare's DeepSeek)
+
+/// A located reply: the model wrote "<severity>" itself, then the score token.
+private func locatedResult(_ pairs: [(String, Double)], extra: [String] = []) -> ChatResult {
+    func entry(_ t: String, _ top: [(String, Double)]) -> JSONValue {
+        .makeObject(["token": .string(t), "logprob": .number(-0.1),
+                     "top_logprobs": .array(top.map { .makeObject(["token": .string($0.0), "logprob": .number(log($0.1))]) })])
+    }
+    var content: [JSONValue] = ["<", "sever", "ity", ">"].map { entry($0, [($0, 1)]) }
+    content.append(entry(pairs[0].0, pairs))
+    content += extra.map { entry($0, [($0, 1)]) }
+    return ChatResult(status: 200, json: .makeObject([
+        "choices": .array([.makeObject(["message": .makeObject(["content": .string("")]), "logprobs": .makeObject(["content": .array(content)])])]),
+        "usage": .makeObject(["prompt_tokens": .number(10), "completion_tokens": .number(5)]),
+    ]))
+}
+
+@Test func refusedPrefillFallsBackToLocatingTheScoreAndRemembersIt() async throws {
+    let refused = ChatResult(status: 400, json: json(#"{"error":{"message":"DeepSeek prompt encoding does not support continue_final_message"}}"#))
+    let caller = FakeModelCaller { i, _, _ in i == 0 ? refused : locatedResult([("85", 0.8), ("10", 0.2)]) }
+    let h = DecisionHead(decisionModel: model, caller: caller)
+    let req = request(system: .string(sysSeverity), stops: ["</severity>"])
+    let out = try #require(await h.respond(to: req))
+    #expect(out.feature(path: "content", 0, "text")?.featureString == "<severity>70")
+    let located = caller.calls[1].body
+    #expect(located["continue_final_message"] == nil)
+    #expect(located["temperature"] == nil)
+    #expect(located["chat_template_kwargs"] == .makeObject(["enable_thinking": .bool(false)]))
+    // The next decision goes straight to the located form.
+    _ = await h.respond(to: req)
+    #expect(caller.calls.count == 3)
+    #expect(caller.calls[2].body["continue_final_message"] == nil)
+}
+
+@Test func locatedStageTwoReadsTheCategoryFromTheSameReply() async throws {
+    let refused = ChatResult(status: 400, json: json(#"{"error":{"message":"continue_final_message is not supported"}}"#))
+    let caller = FakeModelCaller { i, _, _ in
+        i == 0 ? refused : locatedResult([("90", 0.95), ("5", 0.05)], extra: ["</", "severity", ">", "<category>", "Force", " Push", "</", "category", ">"])
+    }
+    let h = DecisionHead(decisionModel: model, caller: caller)
+    let out = try #require(await h.respond(to: request(system: .string(sysSeverity), stops: nil)))
+    let text = try #require(out.feature(path: "content", 0, "text")?.featureString)
+    #expect(text.hasPrefix("<severity>") && text.hasSuffix("<category>Force Push</category>"))
+    #expect(caller.calls.count == 2)
+}
+
+@Test func locatedReplyWithoutTheTagFallsBack() async throws {
+    let refused = ChatResult(status: 400, json: json(#"{"error":{"message":"no continue_final_message"}}"#))
+    let thinking = ChatResult(status: 200, json: json(#"{"choices":[{"message":{"content":null},"logprobs":{"content":[{"token":"We","logprob":-0.1,"top_logprobs":[{"token":"We","logprob":-0.1}]}]}}]}"#))
+    let caller = FakeModelCaller { i, _, _ in i == 0 ? refused : thinking }
+    let h = DecisionHead(decisionModel: model, caller: caller)
+    #expect(await h.respond(to: request(system: .string(sysSeverity), stops: ["</severity>"])) == nil)
 }

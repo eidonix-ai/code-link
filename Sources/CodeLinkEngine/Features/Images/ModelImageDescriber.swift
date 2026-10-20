@@ -16,7 +16,6 @@ public final class ModelImageDescriber: ImageDescriber, @unchecked Sendable {
         let url = "data:\(mediaType);base64,\(image.base64EncodedString())"
         return [
             "max_tokens": .number(Double(maxTokens)),
-            "temperature": .number(0),
             "messages": .array([.makeObject([
                 "role": .string("user"),
                 "content": .array([

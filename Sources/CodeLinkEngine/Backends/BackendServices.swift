@@ -59,8 +59,10 @@ enum BackendProber {
     }
 
     /// Whether a model returns logprobs: a 1-token request asking for them.
+    /// No temperature: some servers (Flare) refuse temperature 0, and the
+    /// question is only whether logprobs come back.
     static func logprobs(_ target: BackendTarget, client: UpstreamClient, timeout: Duration) async -> Bool? {
-        let body: JSON = ["messages": [["role": "user", "content": "Hi"]], "max_tokens": 1, "temperature": 0,
+        let body: JSON = ["messages": [["role": "user", "content": "Hi"]], "max_tokens": 1,
                           "logprobs": true, "top_logprobs": 2, "stream": false]
         guard let resp = try? await client.send(target.chatRequest(body, stream: false), headerTimeout: timeout),
               let data = try? await resp.collect(limit: 4 << 20) else { return nil }

@@ -17,6 +17,10 @@ public final class DecisionHead: AutoModeResponder, @unchecked Sendable {
     private let lock = NSLock()
     private var noLogprobsUntil: Date?
     private let noLogprobsTTL: TimeInterval = 600
+    /// Models whose server refuses a prefilled assistant message
+    /// (`continue_final_message`, e.g. Flare's DeepSeek): decided by
+    /// generating a few tokens and reading the one after the tag instead.
+    private var noPrefill: Set<String> = []
 
     public init(decisionModel: Model?, caller: any ModelCaller, threshold: Double = 0.5, log: (any EventLog)? = nil) {
         self.decisionModel = decisionModel
@@ -153,18 +157,71 @@ public final class DecisionHead: AutoModeResponder, @unchecked Sendable {
 
     // MARK: Requests
 
+    // No temperature anywhere: the score is read from the distribution, not
+    // sampled, and some servers (Flare) refuse temperature 0.
+
     static func decisionBody(_ c: Classified, prefill: String) -> [String: JSONValue] {
         [
-            "max_tokens": .number(1), "temperature": .number(0),
+            "max_tokens": .number(1),
             "logprobs": .bool(true), "top_logprobs": .number(Double(topLogprobs)),
             "continue_final_message": .bool(true), "add_generation_prompt": .bool(false),
             "messages": messages(c, prefill: prefill),
         ]
     }
 
+    /// For servers that refuse a prefill: let the model write the tag itself
+    /// (thinking off) and read the distribution of the token after it.
+    static func locateBody(_ c: Classified, thinkingOff: JSONValue?) -> [String: JSONValue] {
+        var body: [String: JSONValue] = [
+            "max_tokens": .number(c.stage == 2 && c.format == .severity ? 48 : 12),
+            "logprobs": .bool(true), "top_logprobs": .number(Double(topLogprobs)),
+            "messages": .array([
+                .makeObject(["role": .string("system"), "content": .string(c.system)]),
+                .makeObject(["role": .string("user"), "content": .string(c.user)]),
+            ]),
+        ]
+        let off = thinkingOff ?? .makeObject(["chat_template_kwargs": .makeObject(["enable_thinking": .bool(false)])])
+        if case .object(let o) = off { for (k, v) in o { body[k] = v } }
+        return body
+    }
+
+    /// The top logprobs of the token right after `tag` in a generated reply.
+    static func topLogprobs(after tag: String, in json: JSONValue) -> [TokenLogprob] {
+        let content = json.feature(path: "choices", 0, "logprobs", "content")?.featureArray ?? []
+        var text = ""
+        for entry in content {
+            if text.trimmingCharacters(in: .whitespacesAndNewlines).hasSuffix(tag) {
+                let arr = entry.feature("top_logprobs")?.featureArray ?? []
+                return arr.compactMap { e in
+                    guard let t = e.feature("token")?.featureString, let lp = e.feature("logprob")?.featureNumber else { return nil }
+                    return TokenLogprob(token: t, logprob: lp)
+                }
+            }
+            text += entry.feature("token")?.featureString ?? ""
+        }
+        return []
+    }
+
+    /// The category a located stage-2 reply wrote, if any.
+    static func locatedCategory(_ json: JSONValue) -> String? {
+        let text = (json.feature(path: "choices", 0, "logprobs", "content")?.featureArray ?? [])
+            .compactMap { $0.feature("token")?.featureString }.joined()
+        guard let r = text.range(of: "<category>") else { return nil }
+        let rest = text[r.upperBound...]
+        let end = rest.range(of: "</")?.lowerBound ?? rest.endIndex
+        let c = sanitizeCategory(String(rest[..<end]))
+        return c.isEmpty ? nil : c
+    }
+
+    static func refusesPrefill(_ r: ChatResult) -> Bool {
+        guard r.status == 400 || r.status == 422 else { return false }
+        let text = String(describing: r.json).lowercased()
+        return text.contains("continue_final_message") || text.contains("prefill")
+    }
+
     static func categoryBody(_ c: Classified, n: Int) -> [String: JSONValue] {
         [
-            "max_tokens": .number(16), "temperature": .number(0),
+            "max_tokens": .number(16),
             "stop": .array([.string("</category>")]),
             "continue_final_message": .bool(true), "add_generation_prompt": .bool(false),
             "messages": messages(c, prefill: "<severity>\(n)</severity><category>"),
@@ -243,23 +300,37 @@ public final class DecisionHead: AutoModeResponder, @unchecked Sendable {
         var usage = Usage()
 
         let prefill = c.format == .block ? "<block>" : "<severity>"
-        let first: ChatResult
-        do { first = try await caller.chat(model: model, body: Self.decisionBody(c, prefill: prefill)) }
-        catch { record(c, model, 0, 0, started: started, "upstream error"); return nil }
+        var located = usesLocate(model)
+        var first: ChatResult
+        do {
+            first = try await caller.chat(model: model, body: located ? Self.locateBody(c, thinkingOff: model.thinkingOff)
+                                                                      : Self.decisionBody(c, prefill: prefill))
+            if !located, Self.refusesPrefill(first) {
+                markNoPrefill(model); located = true
+                first = try await caller.chat(model: model, body: Self.locateBody(c, thinkingOff: model.thinkingOff))
+            }
+        } catch { record(c, model, 0, 0, started: started, "upstream error"); return nil }
         guard (200..<300).contains(first.status) else {
             record(c, model, 0, 0, started: started, "upstream HTTP \(first.status)"); return nil
         }
         usage.add(first.json)
 
-        let top = Self.topLogprobs(of: first.json)
-        if top.isEmpty { markNoLogprobs(); record(c, model, 0, 0, started: started, "no logprobs"); return nil }
+        let top = located ? Self.topLogprobs(after: prefill, in: first.json) : Self.topLogprobs(of: first.json)
+        if top.isEmpty {
+            // Logprobs came back but the tag wasn't written (located): not a
+            // missing-logprobs server, just no usable answer this time.
+            if !located || first.json.feature(path: "choices", 0, "logprobs", "content") == nil { markNoLogprobs() }
+            record(c, model, 0, 0, started: started, located ? "tag not found" : "no logprobs"); return nil
+        }
         guard let score = c.format == .block ? Self.scoreBlock(top) : Self.scoreSeverity(top) else {
             record(c, model, 0, 0, started: started, "low token mass"); return nil
         }
         let (n, block) = Self.decide(score, threshold: threshold)
 
         var category: String?
-        if c.format == .severity, c.stage == 2, block {
+        if c.format == .severity, c.stage == 2, block, located {
+            category = Self.locatedCategory(first.json)
+        } else if c.format == .severity, c.stage == 2, block {
             if let r = try? await caller.chat(model: model, body: Self.categoryBody(c, n: n)), (200..<300).contains(r.status) {
                 usage.add(r.json)
                 category = Self.sanitizeCategory(Self.generatedText(r.json))
@@ -290,6 +361,14 @@ public final class DecisionHead: AutoModeResponder, @unchecked Sendable {
         lock.lock(); defer { lock.unlock() }
         if let t = noLogprobsUntil, t > Date() { return true }
         return false
+    }
+    private func usesLocate(_ m: Model) -> Bool {
+        lock.lock(); defer { lock.unlock() }
+        return noPrefill.contains(m.id)
+    }
+    private func markNoPrefill(_ m: Model) {
+        lock.lock(); defer { lock.unlock() }
+        noPrefill.insert(m.id)
     }
     private func markNoLogprobs() {
         lock.lock(); defer { lock.unlock() }
