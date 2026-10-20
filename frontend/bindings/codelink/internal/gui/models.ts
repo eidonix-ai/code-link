@@ -22,6 +22,11 @@ export interface Platform {
     "terminals": launch$0.Choice[] | null;
     "permissionModes": launch$0.Choice[] | null;
     "defaultPort": number;
+
+    /**
+     * GatewayURL fills in a new Go-LLM-Proxy provider's address.
+     */
+    "gatewayURL": string;
 }
 
 /**
@@ -36,4 +41,10 @@ export interface Snapshot {
     "loadWarning": string;
     "activity": app$0.Entry[] | null;
     "path": string;
+
+    /**
+     * GetStarted is set when only a key is missing: Settings opens on
+     * "Paste your API key".
+     */
+    "getStarted": app$0.KeyNeed | null;
 }

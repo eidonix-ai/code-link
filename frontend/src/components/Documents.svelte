@@ -7,6 +7,7 @@
 
   let result = $state<CheckResult | null>(null);
   let testing = $state(false);
+  const value = $derived(settings.documentsValue);
 
   async function test() {
     testing = true;
@@ -19,18 +20,28 @@
 </script>
 
 <Section title="Documents">
-  <div>
-    <Row label="PaddleOCR" hint="A /layout-parsing URL, used first" wide>
-      <input type="url" bind:value={settings.draft.documents.paddleOCR} oninput={() => (result = null)}
-        placeholder="Optional" spellcheck="false" aria-label="PaddleOCR URL" />
-      <button onclick={test} disabled={testing || !settings.draft.documents.paddleOCR}>{testing ? "Testing…" : "Test"}</button>
-    </Row>
-    {#if result}
-      <div class="pad"><Note level={result.ok ? "ok" : "error"} text={result.detail} /></div>
-    {/if}
-  </div>
-  <Row label="Otherwise">
-    <select bind:value={settings.draft.documents.local} aria-label="Without PaddleOCR">
+  <Row label="Read documents" hint="PDFs and scans in a conversation">
+    <select value={value} aria-label="Read documents"
+      onchange={(e) => { result = null; settings.setDocuments(e.currentTarget.value); }}>
+      {#each settings.documentsOptions as o (o.value)}
+        <option value={o.value}>{o.label}</option>
+      {/each}
+    </select>
+  </Row>
+  {#if value === "paddle"}
+    <div>
+      <Row label="PaddleOCR URL" hint="Its /layout-parsing address" wide>
+        <input type="url" bind:value={settings.draft.documents.paddleOCR} oninput={() => (result = null)}
+          placeholder="http://host:8002/layout-parsing" spellcheck="false" aria-label="PaddleOCR URL" />
+        <button onclick={test} disabled={testing || !settings.draft.documents.paddleOCR}>{testing ? "Testing…" : "Test"}</button>
+      </Row>
+      {#if result}
+        <div class="pad"><Note level={result.ok ? "ok" : "error"} text={result.detail} /></div>
+      {/if}
+    </div>
+  {/if}
+  <Row label={value === "local" ? "On this computer" : "If that fails"}>
+    <select bind:value={settings.draft.documents.local} aria-label="Read on this computer">
       <option value="ocr">Read on this computer</option>
       <option value="text">PDF text only</option>
       <option value="off">Don't read documents</option>

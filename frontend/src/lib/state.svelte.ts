@@ -4,7 +4,8 @@
 // the draft directly.
 import {
   Settings, canonical, clone, onActivity, onSettingsOpen, onStatus,
-  type CheckResult, type ChoiceGroup, type Config, type Entry, type Probe, type Snapshot, type Status, type View, Slot,
+  type CheckResult, type ChoiceGroup, type Config, type Entry, type ImportPreview, type KeyNeed, type Option, type Probe,
+  type Snapshot, type Status, type View, Slot,
 } from "./api";
 
 type Platform = Snapshot["platform"];
@@ -41,7 +42,7 @@ class SettingsState {
   decision = $state("");
   warnings = $state<string[]>([]);
   status = $state<Status>({ kind: "notConfigured" as Status["kind"], line: "", port: 0, level: "idle" });
-  platform = $state<Platform>({ os: "darwin", terminals: [], permissionModes: [], defaultPort: 18775 });
+  platform = $state<Platform>({ os: "darwin", terminals: [], permissionModes: [], defaultPort: 18775, gatewayURL: "" });
   probes = $state<Record<string, Probe>>({});
   probing = $state<Record<string, boolean>>({});
   activity = $state<Entry[]>([]);
@@ -49,6 +50,15 @@ class SettingsState {
   message = $state<Message>(null);
   saving = $state(false);
   path = $state("");
+  searchOptions = $state<Option[]>([]);
+  searchValue = $state("off");
+  documentsOptions = $state<Option[]>([]);
+  documentsValue = $state("local");
+  /** Set while only a key is missing: the page shows "Get started". */
+  getStarted = $state<KeyNeed | null>(null);
+  /** Keys an import still needs. */
+  needs = $state<KeyNeed[]>([]);
+  importPreview = $state<ImportPreview | null>(null);
 
   dirty = $derived(this.loaded && canonical(this.draft) !== canonical(this.saved));
 
@@ -68,9 +78,17 @@ class SettingsState {
 
   private apply(v: View) {
     this.draft = normalize(v.draft);
+    this.derive(v);
+    if (v.warning) this.warnings = [...this.warnings, v.warning];
+  }
+
+  private derive(v: View) {
     this.groups = v.groups ?? [];
     this.decision = v.decision;
-    if (v.warning) this.warnings = [...this.warnings, v.warning];
+    this.searchOptions = v.search ?? [];
+    this.searchValue = v.searchValue;
+    this.documentsOptions = v.documents ?? [];
+    this.documentsValue = v.documentsValue;
   }
 
   async load() {
@@ -82,14 +100,16 @@ class SettingsState {
     this.activity = s.activity ?? [];
     this.loadWarning = s.loadWarning;
     this.path = s.path;
+    this.getStarted = s.getStarted;
     if (!this.loaded || !this.dirty) {
       this.draft = normalize(clone(s.saved));
-      this.groups = s.view.groups ?? [];
-      this.decision = s.view.decision;
+      this.derive(s.view);
     }
     this.loaded = true;
     for (const b of this.draft.backends ?? []) {
-      if (!this.probes[b.id]) this.probe(b.id);
+      // A Go-LLM-Proxy without its key would only answer "unauthorized".
+      const keyless = b.kind === "gollm" && !b.apiKey;
+      if (!this.probes[b.id] && !keyless) this.probe(b.id);
     }
   }
 
@@ -188,10 +208,91 @@ class SettingsState {
     await this.refresh();
   }
 
+  setSearch(value: string) {
+    return this.edit((d) => Settings.SetSearch(d, value));
+  }
+  setDocuments(value: string) {
+    return this.edit((d) => Settings.SetDocuments(d, value));
+  }
+
+  /**
+   * Puts keys on providers; a Go-LLM-Proxy is tested and its models enabled.
+   * With save, saves when every key worked. Returns the errors by provider.
+   */
+  async applyKeys(keys: Record<string, string>, save: boolean): Promise<Record<string, string>> {
+    const r = await this.run(() => Settings.ApplyKeys(this.snapshot(), keys, save));
+    if (!r.ok) {
+      this.apply(r.view);
+      if (r.save && !r.save.ok) this.message = { level: "error", text: (r.save.problems ?? []).join(" ") };
+      return (r.errors ?? {}) as Record<string, string>;
+    }
+    if (r.save) {
+      this.saved = r.save.saved;
+      this.status = r.save.status;
+      this.draft = normalize(clone(r.save.saved));
+      this.derive(r.view);
+      this.message = { level: "ok", text: "Saved" };
+      const n = ++this.saves;
+      setTimeout(() => n === this.saves && (this.message = null), 2500);
+    } else {
+      this.apply(r.view);
+    }
+    this.getStarted = null;
+    this.probes = ((await Settings.Load()).probes ?? {}) as Record<string, Probe>;
+    return {};
+  }
+
+  openURL(url: string) {
+    return Settings.OpenURL(url);
+  }
+
+  async exportSettings() {
+    try {
+      const path = await Settings.Export();
+      if (path) this.message = { level: "ok", text: "Exported to " + path };
+    } catch (e) {
+      this.message = { level: "error", text: "Couldn't export: " + String(e) };
+    }
+  }
+
+  async chooseImport() {
+    try {
+      this.importPreview = await Settings.Import();
+    } catch (e) {
+      this.message = { level: "error", text: errorText(e) };
+    }
+  }
+
+  async confirmImport() {
+    const p = this.importPreview;
+    if (!p) return;
+    this.importPreview = null;
+    try {
+      const r = await this.run(() => Settings.ImportInto(this.snapshot(), p.data));
+      this.apply(r.view);
+      this.needs = r.needs ?? [];
+      this.message = this.needs.length ? null : { level: "warn", text: "Imported. Review and Save." };
+    } catch (e) {
+      this.message = { level: "error", text: errorText(e) };
+    }
+  }
+
   async clearActivity() {
     await Settings.ClearActivity();
     this.activity = [];
   }
+}
+
+/** A Go error from a binding, as text. */
+function errorText(e: unknown): string {
+  const m = e instanceof Error ? e.message : String(e);
+  try {
+    const j = JSON.parse(m);
+    if (j && typeof j.message === "string") return j.message;
+  } catch {
+    /* plain text */
+  }
+  return m;
 }
 
 export const settings = new SettingsState();

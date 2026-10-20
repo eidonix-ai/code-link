@@ -26,6 +26,14 @@ export enum BackendKind {
      * Anthropic is a native Messages endpoint: requests pass through.
      */
     Anthropic = "anthropic",
+
+    /**
+     * GoLLMProxy is a go-llm-proxy gateway (e.g. llm.eidonix.com): Chat
+     * Completions like OpenAICompatible, and with the same key its web
+     * search and document reading, which code-link uses unless set up
+     * otherwise.
+     */
+    GoLLMProxy = "gollm",
 };
 
 export interface Config {
@@ -51,6 +59,12 @@ export interface Config {
 
 export interface Documents {
     /**
+     * Via is a provider (a go-llm-proxy gateway) whose document reading is
+     * used, with that provider's key; it overrides PaddleOCR.
+     */
+    "via"?: string;
+
+    /**
      * PaddleOCR is a PaddleOCR(-VL) /layout-parsing endpoint, tried first.
      */
     "paddleOCR"?: string;
@@ -59,6 +73,11 @@ export interface Documents {
      * Local is used when PaddleOCR isn't set, is unreachable or fails.
      */
     "local"?: LocalExtraction;
+
+    /**
+     * LocalOnly: never through a gateway, even when one has a key.
+     */
+    "localOnly"?: boolean;
 }
 
 export interface Launch {
@@ -181,8 +200,19 @@ export enum SearchProvider {
 
 export interface WebSearch {
     /**
+     * Via is a provider (a go-llm-proxy gateway) whose web search is used,
+     * with that provider's key; it overrides Provider.
+     */
+    "via"?: string;
+
+    /**
      * Provider empty = off (searches answer "unavailable").
      */
     "provider"?: SearchProvider;
     "apiKey"?: string;
+
+    /**
+     * Off: no web search, even when a gateway has a key.
+     */
+    "off"?: boolean;
 }

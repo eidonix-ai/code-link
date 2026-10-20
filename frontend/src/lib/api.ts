@@ -7,7 +7,9 @@ import type { Entry, Status } from "../../bindings/codelink/internal/app/models.
 
 export { Settings };
 export type { Config, Backend, Model } from "../../bindings/codelink/internal/config/models.js";
-export type { View, ChoiceGroup, ChoiceItem, Status, Entry, CheckResult, SaveResult } from "../../bindings/codelink/internal/app/models.js";
+export type {
+  View, ChoiceGroup, ChoiceItem, Status, Entry, CheckResult, SaveResult, KeyNeed, Option, ImportPreview,
+} from "../../bindings/codelink/internal/app/models.js";
 export type { Probe, ProbedModel } from "../../bindings/codelink/internal/core/models.js";
 export type { Snapshot } from "../../bindings/codelink/internal/gui/models.js";
 export { Slot } from "../../bindings/codelink/internal/app/models.js";

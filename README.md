@@ -21,6 +21,14 @@ Settings live in one file, `code-link.json`: next to the program when one is
 there (portable mode), else `~/Library/Application Support/Eidonix/code-link`
 on macOS and `%AppData%\Eidonix\code-link` on Windows.
 
+A fresh install ships one provider, the Go-LLM-Proxy gateway
+`llm.eidonix.com`, without a key: Settings opens on "Get started", where
+pasting the key is the whole setup (its models are enabled, the gateway's
+recommended models fill the roles, and web search and documents go through
+it). "Share settings" exports a `.codelink` file — providers, models, roles,
+documents and web search, never keys, the token, the port or launch
+settings — and imports one, asking for the keys it needs.
+
 ## Building
 
 Needs Go 1.27, Node 20+ and the Wails 3 CLI

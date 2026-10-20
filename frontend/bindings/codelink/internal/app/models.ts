@@ -61,6 +61,70 @@ export interface Entry {
 }
 
 /**
+ * ImportPreview is what a .codelink file would bring.
+ */
+export interface ImportPreview {
+    "providers": string[] | null;
+    "models": string[] | null;
+    "roles": string[] | null;
+
+    /**
+     * Data is the file, handed back to ImportInto.
+     */
+    "data": string;
+}
+
+/**
+ * ImportResult is a merged draft and the keys it still needs.
+ */
+export interface ImportResult {
+    "view": View;
+    "needs": KeyNeed[] | null;
+}
+
+/**
+ * KeyNeed is a provider an import (or first run) wants a key for.
+ */
+export interface KeyNeed {
+    "id": string;
+    "kind": config$0.BackendKind;
+    "host": string;
+    "joinURL": string;
+
+    /**
+     * Required: a Go-LLM-Proxy can't be used without one; for other
+     * providers it is optional.
+     */
+    "required": boolean;
+}
+
+/**
+ * KeysResult is ApplyKeys' answer.
+ */
+export interface KeysResult {
+    "ok": boolean;
+
+    /**
+     * Errors are per provider id, in plain words.
+     */
+    "errors": { [_ in string]?: string } | null;
+    "view": View;
+
+    /**
+     * Save is the save's result when one was asked for and the keys worked.
+     */
+    "save": SaveResult | null;
+}
+
+/**
+ * Option is a choice in a picker.
+ */
+export interface Option {
+    "value": string;
+    "label": string;
+}
+
+/**
  * SaveResult is Save's answer.
  */
 export interface SaveResult {
@@ -134,4 +198,12 @@ export interface View {
     "groups": ChoiceGroup[] | null;
     "decision": string;
     "warning": string;
+
+    /**
+     * Search and Documents are the pickers' choices and current values.
+     */
+    "search": Option[] | null;
+    "searchValue": string;
+    "documents": Option[] | null;
+    "documentsValue": string;
 }
