@@ -1,0 +1,213 @@
+/* A calm, system-like page: the system font and colours, grouped sections,
+   Eidonix teal only on the primary button, toggles and focus; green, amber
+   and red only for status dots. macOS and Windows differ slightly (html.mac /
+   html.win), both follow light and dark mode. */
+
+:root {
+  color-scheme: light dark;
+  --accent: #009ea3;
+  --accent-text: #ffffff;
+  --bg: #ececec;
+  --group: #ffffff;
+  --group-border: rgba(0, 0, 0, 0.07);
+  --separator: rgba(0, 0, 0, 0.09);
+  --text: rgba(0, 0, 0, 0.88);
+  --secondary: rgba(0, 0, 0, 0.5);
+  --tertiary: rgba(0, 0, 0, 0.3);
+  --field: #ffffff;
+  --field-border: rgba(0, 0, 0, 0.16);
+  --button: #ffffff;
+  --button-border: rgba(0, 0, 0, 0.14);
+  --button-hover: #f6f6f6;
+  --footer: rgba(246, 246, 246, 0.92);
+  --ok: #1e8e5a;
+  --warn: #b87700;
+  --error: #d70015;
+  --idle: rgba(0, 0, 0, 0.22);
+  --radius: 10px;
+  --control-radius: 6px;
+  --font: -apple-system, BlinkMacSystemFont, "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+  --mono: ui-monospace, "SF Mono", "Cascadia Mono", Consolas, monospace;
+  --size: 13px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --accent: #00c2c7;
+    --accent-text: #00191a;
+    --bg: #1e1e1e;
+    --group: rgba(255, 255, 255, 0.045);
+    --group-border: rgba(255, 255, 255, 0.07);
+    --separator: rgba(255, 255, 255, 0.08);
+    --text: rgba(255, 255, 255, 0.88);
+    --secondary: rgba(255, 255, 255, 0.52);
+    --tertiary: rgba(255, 255, 255, 0.3);
+    --field: rgba(255, 255, 255, 0.06);
+    --field-border: rgba(255, 255, 255, 0.13);
+    --button: rgba(255, 255, 255, 0.1);
+    --button-border: rgba(255, 255, 255, 0.08);
+    --button-hover: rgba(255, 255, 255, 0.15);
+    --footer: rgba(40, 40, 40, 0.92);
+    --ok: #34c77b;
+    --warn: #e0a63a;
+    --error: #ff5a52;
+    --idle: rgba(255, 255, 255, 0.25);
+  }
+}
+
+/* Windows 11: Segoe UI at 14 px, lighter surfaces, smaller radii. */
+html.win {
+  --size: 14px;
+  --bg: #f3f3f3;
+  --group: #fbfbfb;
+  --group-border: #e5e5e5;
+  --separator: #ebebeb;
+  --radius: 7px;
+  --control-radius: 4px;
+  --button-hover: #f5f5f5;
+  --footer: rgba(243, 243, 243, 0.94);
+}
+@media (prefers-color-scheme: dark) {
+  html.win {
+    --bg: #202020;
+    --group: #2b2b2b;
+    --group-border: #1d1d1d;
+    --separator: #232323;
+    --field: #2d2d2d;
+    --button: #2d2d2d;
+    --button-border: #353535;
+    --button-hover: #323232;
+    --footer: rgba(32, 32, 32, 0.94);
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font: var(--size) / 1.38 var(--font);
+  -webkit-font-smoothing: antialiased;
+  -webkit-user-select: none;
+  user-select: none;
+  cursor: default;
+}
+
+#app {
+  height: 100%;
+}
+
+input,
+select,
+textarea,
+button {
+  font: inherit;
+  color: inherit;
+}
+
+input[type="text"],
+input[type="url"],
+input[type="password"],
+input[type="number"],
+select {
+  height: 24px;
+  padding: 0 7px;
+  border: 1px solid var(--field-border);
+  border-radius: var(--control-radius);
+  background: var(--field);
+  outline: none;
+  min-width: 0;
+  -webkit-user-select: text;
+  user-select: text;
+}
+html.win input[type="text"],
+html.win input[type="url"],
+html.win input[type="password"],
+html.win input[type="number"],
+html.win select {
+  height: 30px;
+  padding: 0 9px;
+}
+
+select {
+  padding-right: 4px;
+}
+
+input::placeholder {
+  color: var(--tertiary);
+}
+
+input:focus-visible,
+select:focus-visible,
+button:focus-visible,
+summary:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+}
+
+input[type="checkbox"] {
+  accent-color: var(--accent);
+  margin: 0;
+  width: 14px;
+  height: 14px;
+}
+
+button {
+  height: 24px;
+  padding: 0 11px;
+  border: 1px solid var(--button-border);
+  border-radius: var(--control-radius);
+  background: var(--button);
+  white-space: nowrap;
+  box-shadow: 0 0.5px 1px rgba(0, 0, 0, 0.06);
+}
+html.win button {
+  height: 30px;
+  padding: 0 14px;
+}
+button:hover:not(:disabled) {
+  background: var(--button-hover);
+}
+button:disabled {
+  opacity: 0.45;
+}
+button.primary {
+  background: var(--accent);
+  border-color: transparent;
+  color: var(--accent-text);
+  font-weight: 500;
+}
+button.primary:hover:not(:disabled) {
+  background: var(--accent);
+  filter: brightness(1.06);
+}
+button.link {
+  border: none;
+  background: none;
+  box-shadow: none;
+  padding: 0;
+  height: auto;
+  color: var(--secondary);
+}
+button.link:hover:not(:disabled) {
+  background: none;
+  color: var(--text);
+}
+
+.secondary {
+  color: var(--secondary);
+}
+
+.mono {
+  font-family: var(--mono);
+  font-size: 0.92em;
+}

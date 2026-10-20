@@ -122,6 +122,13 @@ func (a *App) Config() config.Config {
 	return a.cfg
 }
 
+// Configured: the saved settings have a main model on a known provider.
+func (a *App) Configured() bool {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.cfg.Configured()
+}
+
 // LoadWarning is the note from loading the settings ("" = none).
 func (a *App) LoadWarning() string { return a.loadWarning }
 
