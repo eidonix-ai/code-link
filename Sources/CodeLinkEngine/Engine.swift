@@ -62,7 +62,7 @@ public final class Engine: Sendable {
     public convenience init(config: EngineConfig, secrets: SecretStore, log: EventLog, accessToken: String,
                             hooksFactory: any EngineHooksFactory = DefaultHooksFactory()) {
         self.init(config: config, secrets: secrets, log: log, accessToken: accessToken, hooksFactory: hooksFactory,
-                  tuning: EngineTuning(), responses: NotImplementedResponses())
+                  tuning: EngineTuning(), responses: CodexResponses())
     }
 
     init(config: EngineConfig, secrets: any SecretStore, log: any EventLog, accessToken: String,

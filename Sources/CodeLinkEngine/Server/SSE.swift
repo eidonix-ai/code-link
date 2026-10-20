@@ -12,8 +12,12 @@ final class SSESink: Sendable {
     let stream: AsyncStream<ByteBuffer>
     private struct State { var lastWrite = ContinuousClock.now; var finished = false }
     private let state = Mutex(State())
+    /// Keepalives are SSE comments instead of `ping` events (Responses and
+    /// Chat Completions clients have no ping event).
+    private let commentPings: Bool
 
-    init() {
+    init(commentPings: Bool = false) {
+        self.commentPings = commentPings
         (stream, continuation) = AsyncStream.makeStream(of: ByteBuffer.self)
     }
 
@@ -41,7 +45,9 @@ final class SSESink: Sendable {
         raw("event: \(name)\ndata: \(JSON.object(o).text)\n\n")
     }
 
-    func ping() { event("ping") }
+    func ping() {
+        if commentPings { raw(": keepalive\n\n") } else { event("ping") }
+    }
 
     func finish() {
         state.withLock { $0.finished = true }
@@ -54,12 +60,13 @@ final class SSESink: Sendable {
 /// `pingInterval`. A client that goes away (a failed write, or the
 /// connection closing) cancels `produce`, and with it the upstream request.
 func streamingResponse(status: HTTPResponse.Status = .ok, headers extra: HTTPFields = [:], channel: (any Channel)?,
-                       pingInterval: Duration?, produce: @escaping @Sendable (SSESink) async -> Void) -> Response {
+                       pingInterval: Duration?, commentPings: Bool = false,
+                       produce: @escaping @Sendable (SSESink) async -> Void) -> Response {
     var headers = extra
     headers[.contentType] = "text/event-stream"
     headers[.cacheControl] = "no-cache"
     let body = ResponseBody { writer in
-        let sink = SSESink()
+        let sink = SSESink(commentPings: commentPings)
         channel?.closeFuture.whenComplete { _ in sink.finish() }
         try await withThrowingTaskGroup(of: Void.self) { group in
             group.addTask {

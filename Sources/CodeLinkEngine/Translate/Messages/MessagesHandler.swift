@@ -140,7 +140,7 @@ enum MessagesHandler {
 
     /// Reads one generation into the translator. True when it completed: a
     /// finish reason arrived and the stream was not cut.
-    static func pump(_ resp: UpstreamResponse, into t: StreamTranslator) async -> Bool {
+    static func pump(_ resp: UpstreamResponse, into t: some ChatLineConsumer) async -> Bool {
         var reader = resp.lines()
         do {
             while let line = try await reader.next() {

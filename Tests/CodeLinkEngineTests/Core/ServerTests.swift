@@ -31,21 +31,13 @@ private let okCompletion: @Sendable (StubBackend.Seen, Int) -> StubBackend.Reply
 
     @Test func modelsListsConfiguredIDsAndRoleAliases() async throws {
         try await CoreHarness.run(backend: okCompletion) { h in
-            let r = try await h.request("GET", "/v1/models")
+            let r = try await h.request("GET", "/v1/models", headers: ["anthropic-version": "2023-06-01"])
             #expect(r.status == 200)
             let ids = (r.json?["data"]?.array ?? []).compactMap { $0["id"]?.string }
             #expect(ids == ["GLM", "Small", "Big", "sonnet", "opus", "haiku"])
             #expect(r.json?["data"]?[0]?["type"]?.string == "model")
             #expect(r.json?["has_more"] == false && r.json?["first_id"]?.string == "GLM")
             #expect(r.json?["data"]?[4]?["display_name"]?.string == "Big (opus)")
-        }
-    }
-
-    @Test func responsesIsNotImplementedYet() async throws {
-        try await CoreHarness.run(backend: okCompletion) { h in
-            let r = try await h.request("POST", "/v1/responses", body: #"{"model":"GLM","input":"hi"}"#)
-            #expect(r.status == 501)
-            #expect(h.backend.chatRequests.isEmpty)
         }
     }
 

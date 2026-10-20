@@ -21,11 +21,11 @@ struct MediaContext: Sendable {
 /// message after the tool messages. Reads run concurrently, once per distinct
 /// document or image in the request.
 enum MediaPreprocessor {
-    private enum Job: Sendable {
+    enum Job: Sendable {
         case document(source: DocSource, title: String?, context: String?)
         case image(source: DocSource)
     }
-    private enum DocSource: Sendable {
+    enum DocSource: Sendable {
         case base64(data: String, mediaType: String)
         case url(String)
     }
@@ -38,7 +38,20 @@ enum MediaPreprocessor {
             return nil
         }
         guard !jobs.isEmpty else { return req }
+        let results = await runAll(jobs, ctx)
 
+        let rewritten = rewrite(messages) { block, inToolResult in
+            guard let (key, _) = jobFor(block, ctx), let text = results[key] else { return nil }
+            return [["type": .string(inToolResult ? attachmentTextType : "text"), "text": .string(text)]]
+        }
+        var out = req
+        out["messages"] = .array(rewritten)
+        return out
+    }
+
+    /// Runs the jobs, four at a time. The Responses and Chat Completions
+    /// routes use it for their own request shapes.
+    static func runAll(_ jobs: [String: Job], _ ctx: MediaContext) async -> [String: String] {
         var results: [String: String] = [:]
         await withTaskGroup(of: (String, String).self) { group in
             var pending = Array(jobs)
@@ -55,14 +68,7 @@ enum MediaPreprocessor {
                 next()
             }
         }
-
-        let rewritten = rewrite(messages) { block, inToolResult in
-            guard let (key, _) = jobFor(block, ctx), let text = results[key] else { return nil }
-            return [["type": .string(inToolResult ? attachmentTextType : "text"), "text": .string(text)]]
-        }
-        var out = req
-        out["messages"] = .array(rewritten)
-        return out
+        return results
     }
 
     /// Applies `replace` to every block of every user message (and to the
@@ -132,7 +138,7 @@ enum MediaPreprocessor {
         }
     }
 
-    private static func sha(_ s: String) -> String {
+    static func sha(_ s: String) -> String {
         SHA256.hash(data: Data(s.utf8)).map { String(format: "%02x", $0) }.joined()
     }
 

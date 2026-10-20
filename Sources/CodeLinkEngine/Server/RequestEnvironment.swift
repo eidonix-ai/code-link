@@ -56,16 +56,8 @@ struct IncomingRequest: Sendable {
     var channel: (any Channel)?
 }
 
-/// `/v1/responses` (Codex, docs/DESIGN.md §5). Until it is built the engine
-/// answers 501; the Responses team supplies a conforming handler.
+/// `/v1/responses` (Codex, docs/DESIGN.md §5): `CodexResponses`. A seam so
+/// tests and embedders can supply another handler.
 protocol ResponsesHandler: Sendable {
     func respond(_ request: IncomingRequest, env: RequestEnvironment) async -> Response
-}
-
-struct NotImplementedResponses: ResponsesHandler {
-    func respond(_ request: IncomingRequest, env: RequestEnvironment) async -> Response {
-        .json(["error": ["type": "not_implemented", "code": "not_implemented",
-                         "message": "the Responses API (Codex) is not available in this version of code-link"]],
-              status: .notImplemented)
-    }
 }
