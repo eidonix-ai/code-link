@@ -32,10 +32,10 @@ func (e *TransportError) Unwrap() error { return e.Err }
 
 // Request is one upstream exchange.
 type Request struct {
-	URL     string
-	Method  string // "" = POST
-	Header  http.Header
-	Body    []byte
+	URL    string
+	Method string // "" = POST
+	Header http.Header
+	Body   []byte
 	// RefusePrivateRedirects refuses redirects to loopback, private or
 	// link-local addresses (fetching documents by URL).
 	RefusePrivateRedirects bool

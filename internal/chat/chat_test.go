@@ -310,7 +310,7 @@ func TestClientDisconnectCancelsTheUpstream(t *testing.T) {
 // Documents and images.
 
 func TestImagesForAModelWithoutVisionAreDescribedOrNoted(t *testing.T) {
-	t.Skip("needs media port")
+	// media port landed
 	png := base64.StdEncoding.EncodeToString([]byte(strings.Repeat("\x03", 64)))
 	messages := `[{"role":"user","content":[{"type":"text","text":"what is this"},
 	   {"type":"image_url","image_url":{"url":"data:image/png;base64,` + png + `","detail":"low"}}]}]`
@@ -344,7 +344,7 @@ func TestImagesForAModelWithoutVisionAreDescribedOrNoted(t *testing.T) {
 }
 
 func TestPDFFilePartsAreReadAsDocuments(t *testing.T) {
-	t.Skip("needs media port")
+	// media port landed
 	reader := &testkit.DocReader{}
 	messages := `[{"role":"user","content":[{"type":"text","text":"summarise"},
 	   {"type":"file","file":{"filename":"report.pdf","file_data":"data:application/pdf;base64,JVBERi0xLjQK"}},
@@ -721,7 +721,7 @@ func TestAnthropicErrorsBecomeOpenAIErrors(t *testing.T) {
 }
 
 func TestImagesGoToAnAnthropicModelAndDocumentsAreRead(t *testing.T) {
-	t.Skip("needs media port")
+	// media port landed
 	reader := &testkit.DocReader{}
 	messages := `[{"role":"user","content":[{"type":"image_url","image_url":{"url":"data:image/jpeg;base64,/9j/"}},
 	  {"type":"file","file":{"filename":"a.pdf","file_data":"data:application/pdf;base64,JVBERi0xLjQK"}}]}]`

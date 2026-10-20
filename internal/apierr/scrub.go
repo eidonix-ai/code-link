@@ -134,7 +134,9 @@ func groups(re *regexp.Regexp, s string) []int {
 // parses to compact; "" when info isn't one.
 func RewriteContextLength(info UpstreamInfo) string {
 	msg := info.Message
-	tooLong := func(n, m int) string { return "prompt is too long: " + strconv.Itoa(n) + " tokens > " + strconv.Itoa(m) + " maximum" }
+	tooLong := func(n, m int) string {
+		return "prompt is too long: " + strconv.Itoa(n) + " tokens > " + strconv.Itoa(m) + " maximum"
+	}
 	overflow := func(n, maxTok, m int) string {
 		if n > m {
 			return tooLong(n, m)

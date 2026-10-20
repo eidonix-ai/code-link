@@ -33,7 +33,9 @@ func (e Anthropic) Body() map[string]any {
 	return map[string]any{"type": "error", "error": map[string]any{"type": e.Type, "message": e.Message}}
 }
 
-func Invalid(m string) Anthropic  { return Anthropic{Status: 400, Type: "invalid_request_error", Message: m} }
+func Invalid(m string) Anthropic {
+	return Anthropic{Status: 400, Type: "invalid_request_error", Message: m}
+}
 func NotFound(m string) Anthropic { return Anthropic{Status: 404, Type: "not_found_error", Message: m} }
 func API(status int, m string) Anthropic {
 	return Anthropic{Status: status, Type: "api_error", Message: m}

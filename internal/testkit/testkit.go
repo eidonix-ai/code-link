@@ -378,7 +378,11 @@ func (s *Searcher) Search(_ context.Context, q string, _, _ []string) ([]hooks.S
 		{Title: "Second", URL: "https://example.com/2", Snippet: "More"},
 	}, nil
 }
-func (s *Searcher) Queries() []string { s.mu.Lock(); defer s.mu.Unlock(); return append([]string(nil), s.queries...) }
+func (s *Searcher) Queries() []string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return append([]string(nil), s.queries...)
+}
 
 // Factory gives fixed hooks for every configuration.
 func Factory(h hooks.Hooks) hooks.Factory {
@@ -433,9 +437,9 @@ type HTTPReply struct {
 	Body   []byte
 }
 
-func (r HTTPReply) Text() string          { return string(r.Body) }
+func (r HTTPReply) Text() string         { return string(r.Body) }
 func (r HTTPReply) JSON() map[string]any { return jsonx.ParseObject(r.Body) }
-func (r HTTPReply) Events() []SSEEvent    { return ParseSSE(string(r.Body)) }
+func (r HTTPReply) Events() []SSEEvent   { return ParseSSE(string(r.Body)) }
 
 // Request sends a request; auth adds the access token.
 func (c Client) Request(method, path, body string, header map[string]string, auth bool) (HTTPReply, error) {

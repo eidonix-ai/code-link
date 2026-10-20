@@ -188,7 +188,9 @@ func NewFacts(client *upstream.Client) *Facts {
 	return &Facts{client: client, window: map[string]fact[int]{}, vision: map[string]fact[bool]{}}
 }
 
-func key(t routing.Target) string { return t.Backend.ID + "|" + t.Backend.BaseURL + "|" + t.Model.Upstream }
+func key(t routing.Target) string {
+	return t.Backend.ID + "|" + t.Backend.BaseURL + "|" + t.Model.Upstream
+}
 
 // ContextWindow: the model's configured window, else its backend's
 // max_model_len; 0 = unknown.
