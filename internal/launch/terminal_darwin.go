@@ -11,9 +11,9 @@ import (
 	"strings"
 )
 
-func (o Opener) open(command, folder, pathDir string) error {
+func (o Opener) open(s Session, folder, pathDir string) error {
 	shell := LoginShell(os.Getenv, fileExists)
-	script, err := WriteScript(o.Dir, ".sh", []byte(POSIXScript(shell, command, folder, pathDir)))
+	script, err := WriteScript(o.Dir, ".sh", []byte(POSIXScript(shell, s, folder, pathDir)))
 	if err != nil {
 		return fmt.Errorf("could not write the launch script: %w", err)
 	}

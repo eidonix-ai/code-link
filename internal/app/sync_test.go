@@ -141,7 +141,7 @@ func TestRememberSavesPerToolAndCopyUsesIt(t *testing.T) {
 		back.Launch.Last["codex"] != (config.LaunchChoice{Model: "Big", Folder: folder}) || back.Launch.RecentFolders[0] != folder {
 		t.Errorf("%+v", back.Launch)
 	}
-	if cmd, err := a.Command(launch.ClaudeCode); err != nil || !contains(cmd, "ANTHROPIC_MODEL=Small ", "ANTHROPIC_DEFAULT_OPUS_MODEL=Big ") {
+	if cmd, err := a.Command(launch.ClaudeCode); err != nil || !contains(cmd, "ANTHROPIC_MODEL=Small\n", "ANTHROPIC_DEFAULT_OPUS_MODEL=Big\n") {
 		t.Errorf("%s %v", cmd, err)
 	}
 	if cmd, _ := a.Command(launch.Codex); !contains(cmd, `-c 'model="Big"'`) {

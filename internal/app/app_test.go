@@ -315,15 +315,15 @@ func TestLaunchFindsTheCLIStartsTheEngineAndRemembersTheFolder(t *testing.T) {
 	}
 	var gotCmd, gotFolder, gotDir string
 	var gotOpener launch.Opener
-	a.Open = func(o launch.Opener, command, folder, pathDir string) error {
-		gotOpener, gotCmd, gotFolder, gotDir = o, command, folder, pathDir
+	a.Open = func(o launch.Opener, s launch.Session, folder, pathDir string) error {
+		gotOpener, gotCmd, gotFolder, gotDir = o, s.Command, folder, pathDir
 		return nil
 	}
 	if err := a.Launch(launch.ClaudeCode, LaunchOptions{Model: "Small", Heavy: "Big", Folder: folder}); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(gotCmd, "ANTHROPIC_MODEL=Small ") || !strings.Contains(gotCmd, "ANTHROPIC_DEFAULT_OPUS_MODEL=Big ") ||
-		!strings.Contains(gotCmd, "ANTHROPIC_SMALL_FAST_MODEL=Small ") || !strings.Contains(gotCmd, "CLAUDE_CODE_MAX_CONTEXT_TOKENS=32000 ") {
+	if !strings.Contains(gotCmd, "ANTHROPIC_MODEL=Small\n") || !strings.Contains(gotCmd, "ANTHROPIC_DEFAULT_OPUS_MODEL=Big\n") ||
+		!strings.Contains(gotCmd, "ANTHROPIC_SMALL_FAST_MODEL=Small\n") || !strings.Contains(gotCmd, "CLAUDE_CODE_MAX_CONTEXT_TOKENS=32000\n") {
 		t.Errorf("session models:\n%s", gotCmd)
 	}
 	if last := a.Config().Launch.Last["claude"]; last != (config.LaunchChoice{Model: "Small", Heavy: "Big", Folder: folder}) {
@@ -350,9 +350,9 @@ func TestLaunchFindsTheCLIStartsTheEngineAndRemembersTheFolder(t *testing.T) {
 		t.Error("recents saved")
 	}
 
-	a.Open = func(launch.Opener, string, string, string) error { return errors.New("osascript said no") }
+	a.Open = func(launch.Opener, launch.Session, string, string) error { return errors.New("osascript said no") }
 	var term *TerminalError
-	if err := a.Launch(launch.ClaudeCode, LaunchOptions{Model: "GLM", Folder: folder}); !errors.As(err, &term) || !strings.Contains(err.Error(), "Copy Claude Code command") {
+	if err := a.Launch(launch.ClaudeCode, LaunchOptions{Model: "GLM", Folder: folder}); !errors.As(err, &term) || !strings.Contains(err.Error(), "Settings → Launch") {
 		t.Errorf("terminal: %v", err)
 	}
 	a.ClearRecentFolders()

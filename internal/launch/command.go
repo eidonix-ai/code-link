@@ -162,13 +162,14 @@ func Render(t Tool, c Context, sh Shell) (string, error) {
 	return renderPOSIX(t, inv), nil
 }
 
-// renderPOSIX: VAR=value assignments before the command, so only that
-// process gets them. Claude Code's arguments fit on one line; Codex's -c
-// overrides get a line each.
+// renderPOSIX: export lines, then the command. The launch window's shell
+// keeps them after the tool exits, so `claude --continue` there resumes on
+// code-link. Claude Code's arguments fit on one line; Codex's -c overrides
+// get a line each.
 func renderPOSIX(t Tool, inv Invocation) string {
 	var lines []string
 	for _, v := range inv.Env {
-		lines = append(lines, v.Name+"="+QuoteIfNeeded(v.Value)+` \`)
+		lines = append(lines, "export "+v.Name+"="+QuoteIfNeeded(v.Value))
 	}
 	if t == Codex {
 		lines = append(lines, inv.Name+" "+inv.Args[0]+` \`)

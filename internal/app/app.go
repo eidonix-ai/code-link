@@ -59,7 +59,7 @@ type App struct {
 	LoginItem LoginItem
 	Tools     Tools
 	Find      func(launch.Tool) (launch.Found, bool)
-	Open      func(o launch.Opener, command, folder, pathDir string) error
+	Open      func(o launch.Opener, s launch.Session, folder, pathDir string) error
 	Exe       func() (string, error)
 
 	mu          sync.Mutex
@@ -80,7 +80,7 @@ func New(path string, factory hooks.Factory) *App {
 	cfg, warning := LoadSettings(path)
 	a := &App{Path: path, Activity: &Activity{}, client: upstream.NewClient(), http: &http.Client{},
 		LoginItem: systemLoginItem{}, Tools: systemTools{}, Find: launch.Find, Exe: loginitem.Exe,
-		Open: func(o launch.Opener, command, folder, pathDir string) error { return o.Open(command, folder, pathDir) },
+		Open: func(o launch.Opener, s launch.Session, folder, pathDir string) error { return o.Open(s, folder, pathDir) },
 		cfg:  cfg, probes: map[string]core.Probe{}, loadWarning: warning}
 	a.engine = engine.New(cfg, a.Activity, factory)
 	if warning != "" {
@@ -469,7 +469,7 @@ type TerminalError struct {
 }
 
 func (e *TerminalError) Error() string {
-	return fmt.Sprintf("Couldn't open a terminal: %v. Use “Copy %s command” and run it yourself.", e.Err, e.Tool.DisplayName())
+	return fmt.Sprintf("Couldn't open a terminal for %s: %v. Try another terminal in Settings → Launch.", e.Tool.DisplayName(), e.Err)
 }
 
 func (e *TerminalError) Unwrap() error { return e.Err }
@@ -520,7 +520,7 @@ func (a *App) Launch(t launch.Tool, o LaunchOptions) error {
 	if err != nil {
 		return err
 	}
-	cmd, err := launch.Render(t, c, launch.NativeShell())
+	session, err := launch.NewSession(t, c, launch.NativeShell())
 	if err != nil {
 		return err
 	}
@@ -528,7 +528,7 @@ func (a *App) Launch(t launch.Tool, o LaunchOptions) error {
 	if err != nil {
 		return &TerminalError{t, err}
 	}
-	if err := a.Open(launch.Opener{Dir: dir, Terminal: cfg.Launch.Terminal}, cmd, o.Folder, found.PathDir); err != nil {
+	if err := a.Open(launch.Opener{Dir: dir, Terminal: cfg.Launch.Terminal}, session, o.Folder, found.PathDir); err != nil {
 		return &TerminalError{t, err}
 	}
 	a.Remember(t, o)

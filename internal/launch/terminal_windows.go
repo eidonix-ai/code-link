@@ -13,8 +13,8 @@ import (
 
 const createNewConsole = 0x00000010
 
-func (o Opener) open(command, folder, pathDir string) error {
-	script, err := WriteScript(o.Dir, ".ps1", PowerShellScript(command, folder, pathDir))
+func (o Opener) open(s Session, folder, pathDir string) error {
+	script, err := WriteScript(o.Dir, ".ps1", PowerShellScript(s, folder, pathDir))
 	if err != nil {
 		return fmt.Errorf("could not write the launch script: %w", err)
 	}

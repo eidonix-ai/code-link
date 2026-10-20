@@ -3,6 +3,7 @@ package launch
 import (
 	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -46,23 +47,23 @@ func render(t *testing.T, tool Tool, c Context, sh Shell) string {
 
 func TestClaudeCommandMatchesDesign(t *testing.T) {
 	got := render(t, ClaudeCode, ctx(cfg("GLM-5.3", "Big", "Tiny", "", ip(1_048_576), nil), "auto"), POSIX)
-	want := `ANTHROPIC_BASE_URL=http://127.0.0.1:18765 \
-ANTHROPIC_AUTH_TOKEN=tok_en-1 \
-ANTHROPIC_MODEL=GLM-5.3 \
-ANTHROPIC_DEFAULT_SONNET_MODEL=GLM-5.3 \
-ANTHROPIC_DEFAULT_SONNET_MODEL_NAME=GLM-5.3 \
-ANTHROPIC_DEFAULT_OPUS_MODEL=Big \
-ANTHROPIC_DEFAULT_OPUS_MODEL_NAME=Big \
-ANTHROPIC_DEFAULT_FABLE_MODEL=Big \
-ANTHROPIC_DEFAULT_FABLE_MODEL_NAME=Big \
-ANTHROPIC_DEFAULT_HAIKU_MODEL=Tiny \
-ANTHROPIC_DEFAULT_HAIKU_MODEL_NAME=Tiny \
-ANTHROPIC_SMALL_FAST_MODEL=Tiny \
-CLAUDE_CODE_AUTO_MODE_SERVER=0 \
-CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1 \
-API_TIMEOUT_MS=900000 \
-CLAUDE_CODE_MAX_CONTEXT_TOKENS=1048576 \
-CLAUDE_CODE_AUTO_COMPACT_WINDOW=891289 \
+	want := `export ANTHROPIC_BASE_URL=http://127.0.0.1:18765
+export ANTHROPIC_AUTH_TOKEN=tok_en-1
+export ANTHROPIC_MODEL=GLM-5.3
+export ANTHROPIC_DEFAULT_SONNET_MODEL=GLM-5.3
+export ANTHROPIC_DEFAULT_SONNET_MODEL_NAME=GLM-5.3
+export ANTHROPIC_DEFAULT_OPUS_MODEL=Big
+export ANTHROPIC_DEFAULT_OPUS_MODEL_NAME=Big
+export ANTHROPIC_DEFAULT_FABLE_MODEL=Big
+export ANTHROPIC_DEFAULT_FABLE_MODEL_NAME=Big
+export ANTHROPIC_DEFAULT_HAIKU_MODEL=Tiny
+export ANTHROPIC_DEFAULT_HAIKU_MODEL_NAME=Tiny
+export ANTHROPIC_SMALL_FAST_MODEL=Tiny
+export CLAUDE_CODE_AUTO_MODE_SERVER=0
+export CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1
+export API_TIMEOUT_MS=900000
+export CLAUDE_CODE_MAX_CONTEXT_TOKENS=1048576
+export CLAUDE_CODE_AUTO_COMPACT_WINDOW=891289
 claude --permission-mode auto --settings '/Users/d/Library/Application Support/Eidonix/code-link/claude-settings.json'`
 	if got != want {
 		t.Fatalf("got:\n%s\nwant:\n%s", got, want)
@@ -74,7 +75,7 @@ func TestClaudeAliasesDefaultToMainAndNeverSetClaudeOnlyFlags(t *testing.T) {
 		cmd := render(t, ClaudeCode, ctx(def(), ""), sh)
 		for _, name := range []string{"ANTHROPIC_DEFAULT_OPUS_MODEL", "ANTHROPIC_DEFAULT_FABLE_MODEL", "ANTHROPIC_DEFAULT_HAIKU_MODEL", "ANTHROPIC_SMALL_FAST_MODEL",
 			"ANTHROPIC_DEFAULT_OPUS_MODEL_NAME", "ANTHROPIC_DEFAULT_FABLE_MODEL_NAME", "ANTHROPIC_DEFAULT_HAIKU_MODEL_NAME"} {
-			want := name + "=GLM-5.3 "
+			want := "export " + name + "=GLM-5.3\n"
 			if sh == PowerShell {
 				want = "$env:" + name + " = 'GLM-5.3'"
 			}
@@ -99,14 +100,14 @@ func TestClaudeOmitsWindowVariablesWhenUnknownAndHonoursAutoCompactAt(t *testing
 		t.Errorf("unknown window must not be passed:\n%s", unknown)
 	}
 	explicit := render(t, ClaudeCode, ctx(cfg("GLM-5.3", "", "", "", ip(200_000), ip(150_000)), "auto"), POSIX)
-	if !strings.Contains(explicit, "CLAUDE_CODE_MAX_CONTEXT_TOKENS=200000 ") || !strings.Contains(explicit, "CLAUDE_CODE_AUTO_COMPACT_WINDOW=150000 ") {
+	if !strings.Contains(explicit, "CLAUDE_CODE_MAX_CONTEXT_TOKENS=200000\n") || !strings.Contains(explicit, "CLAUDE_CODE_AUTO_COMPACT_WINDOW=150000\n") {
 		t.Errorf("explicit window and compact point:\n%s", explicit)
 	}
 }
 
 func TestClaudeUsesPermissionModeAndQuotesAwkwardModelNames(t *testing.T) {
 	cmd := render(t, ClaudeCode, ctx(cfg("my model's [1m]", "", "", "", ip(1_048_576), nil), "acceptEdits"), POSIX)
-	if !strings.Contains(cmd, `ANTHROPIC_MODEL='my model'"'"'s [1m]' \`) {
+	if !strings.Contains(cmd, `export ANTHROPIC_MODEL='my model'"'"'s [1m]'`+"\n") {
 		t.Errorf("model not quoted:\n%s", cmd)
 	}
 	if !strings.HasSuffix(cmd, "claude --permission-mode acceptEdits --settings '"+macSettings+"'") {
@@ -151,7 +152,7 @@ func TestCommandsNeedAMainModel(t *testing.T) {
 
 func TestCodexCommandMatchesDesign(t *testing.T) {
 	got := render(t, Codex, ctx(cfg("GLM-5.3", "", "", "Coder", ip(1_048_576), nil), "auto"), POSIX)
-	want := `CODE_LINK_TOKEN=tok_en-1 \
+	want := `export CODE_LINK_TOKEN=tok_en-1
 codex --approve-for-me \
   -c 'model="Coder"' \
   -c 'model_provider="code-link"' \
@@ -234,36 +235,93 @@ func TestShellQuoting(t *testing.T) {
 }
 
 func TestLaunchScriptText(t *testing.T) {
-	got := POSIXScript("/bin/zsh", "claude --version", "/Users/d/my project", "")
+	got := POSIXScript("/bin/zsh", Session{Command: "claude --version", After: "Claude Code has ended."}, "/Users/d/my project", "")
 	want := `#!/bin/zsh -li
 rm -f -- "$0"
 cd -- '/Users/d/my project' || exit 1
 claude --version
-status=$?
-if [ "$status" -ne 0 ]; then printf '\n[exited with status %s; press Return to close]' "$status"; read -r _; fi
+code=$?
+if [ "$code" -ne 0 ]; then printf '\n[exited with status %s]\n' "$code"; fi
+printf '\n%s\n\n' 'Claude Code has ended.'
+rc=$(mktemp -d "${TMPDIR:-/tmp}/code-link-shell.XXXXXX") || exec '/bin/zsh' -i
+printf '%s\n' '[ -f "$HOME/.zshenv" ] && . "$HOME/.zshenv"' > "$rc/.zshenv"
+printf '%s\n' 'ZDOTDIR="$HOME"; [ -f "$HOME/.zshrc" ] && . "$HOME/.zshrc"' '' "rm -rf -- '$rc'" > "$rc/.zshrc"
+ZDOTDIR="$rc" exec '/bin/zsh' -i
 `
 	if got != want {
 		t.Fatalf("got:\n%s\nwant:\n%s", got, want)
 	}
-	if strings.Contains(POSIXScript("/bin/zsh", "x", "", ""), "cd --") {
+	if strings.Contains(POSIXScript("/bin/zsh", Session{Command: "x"}, "", ""), "cd --") {
 		t.Error("no folder, no cd")
 	}
-	if s := POSIXScript("/bin/zsh", "x", "/a", "/Users/d/.local/bin"); !strings.Contains(s, "cd -- '/a' || exit 1\nexport PATH='/Users/d/.local/bin':\"$PATH\"\nx\n") {
+	if s := POSIXScript("/bin/zsh", Session{Command: "x"}, "/a", "/Users/d/.local/bin"); !strings.Contains(s, "cd -- '/a' || exit 1\nexport PATH='/Users/d/.local/bin':\"$PATH\"\nx\n") {
 		t.Errorf("PATH line:\n%s", s)
+	}
+	if s := POSIXScript("/bin/bash", Session{Command: "x", Function: "codex() { command codex -c 'a=1' \"$@\"; }"}, "", ""); !strings.Contains(s, `exec '/bin/bash' --rcfile "$rc" -i`) || !strings.Contains(s, `'codex() { command codex -c '"'"'a=1'"'"' "$@"; }'`) {
+		t.Errorf("bash:\n%s", s)
+	}
+}
+
+// The window is left in an interactive shell that keeps the session's
+// environment and, for Codex, the function that keeps code-link's
+// overrides. Runs the real script in a temporary home.
+func TestLeftoverShellKeepsTheEnvironmentAndFunction(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX shells")
+	}
+	for _, shell := range []string{"/bin/zsh", "/bin/bash"} {
+		if !fileExists(shell) {
+			continue
+		}
+		home := t.TempDir()
+		os.WriteFile(filepath.Join(home, ".zshrc"), []byte("export FROM_RC=yes\n"), 0o600)
+		os.WriteFile(filepath.Join(home, ".bashrc"), []byte("export FROM_RC=yes\n"), 0o600)
+		s := Session{Command: "export CODE_LINK_TOKEN=tok\ntrue", After: "ended", Function: `codex() { echo "wrapped $*"; }`}
+		file := filepath.Join(t.TempDir(), "launch.sh")
+		os.WriteFile(file, []byte(POSIXScript(shell, s, "", "")), 0o700)
+		cmd := exec.Command(shell, file) // as the terminal runs it, minus -li (no login profile here)
+		cmd.Env = []string{"HOME=" + home, "PATH=/usr/bin:/bin", "TMPDIR=" + t.TempDir()}
+		cmd.Stdin = strings.NewReader("echo token=$CODE_LINK_TOKEN rc=$FROM_RC\ncodex resume --last\nexit\n")
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("%s: %v\n%s", shell, err, out)
+		}
+		for _, w := range []string{"ended", "token=tok rc=yes", "wrapped resume --last"} {
+			if !strings.Contains(string(out), w) {
+				t.Errorf("%s: missing %q in:\n%s", shell, w, out)
+			}
+		}
 	}
 }
 
 func TestPowerShellScriptText(t *testing.T) {
-	got := string(PowerShellScript("$env:A = 'x'\nclaude", `C:\Users\A B\code`, `C:\Users\A B\.local\bin`))
+	got := string(PowerShellScript(Session{Command: "$env:A = 'x'\nclaude", After: "Claude Code has ended.", Function: "function global:codex { }"}, `C:\Users\A B\code`, `C:\Users\A B\.local\bin`))
 	want := "\ufeffRemove-Item -LiteralPath $PSCommandPath -Force -ErrorAction SilentlyContinue\r\n" +
 		"Set-Location -LiteralPath 'C:\\Users\\A B\\code'\r\n" +
 		"$env:Path = 'C:\\Users\\A B\\.local\\bin;' + $env:Path\r\n" +
-		"$env:A = 'x'\r\nclaude\r\n"
+		"$env:A = 'x'\r\nclaude\r\n" +
+		"Write-Host ''\r\nWrite-Host 'Claude Code has ended.'\r\nWrite-Host ''\r\n" +
+		"function global:codex { }\r\n"
 	if got != want {
 		t.Fatalf("got:\n%q\nwant:\n%q", got, want)
 	}
-	if s := string(PowerShellScript("x", "", "")); strings.Contains(s, "Set-Location") || strings.Contains(s, "$env:Path") {
-		t.Errorf("no folder, no PATH: %q", s)
+	if s := string(PowerShellScript(Session{Command: "x"}, "", "")); strings.Contains(s, "Set-Location") || strings.Contains(s, "$env:Path") || strings.Contains(s, "Write-Host") {
+		t.Errorf("no folder, no PATH, no note: %q", s)
+	}
+}
+
+func TestSessionsSayHowToResume(t *testing.T) {
+	c, _ := NewSession(ClaudeCode, ctx(def(), ""), POSIX)
+	if !strings.Contains(c.After, "claude --continue") || c.Function != "" {
+		t.Errorf("claude: %+v", c)
+	}
+	x, _ := NewSession(Codex, ctx(def(), ""), POSIX)
+	if !strings.Contains(x.After, "codex resume --last") || !strings.HasPrefix(x.Function, "codex() { command codex --approve-for-me -c ") || !strings.Contains(x.Function, "model_provider=") {
+		t.Errorf("codex: %+v", x)
+	}
+	w, _ := NewSession(Codex, ctx(def(), ""), PowerShell)
+	if !strings.HasPrefix(w.Function, "function global:codex {") || !strings.Contains(w.Function, "@args }") {
+		t.Errorf("powershell: %+v", w)
 	}
 }
 
@@ -404,7 +462,7 @@ func TestTerminalChoices(t *testing.T) {
 
 func TestWritesAnExecutableScriptInTheLaunchDirectory(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "launch")
-	p, err := WriteScript(dir, ".sh", []byte(POSIXScript("/bin/zsh", "echo hi", "/tmp", "")))
+	p, err := WriteScript(dir, ".sh", []byte(POSIXScript("/bin/zsh", Session{Command: "echo hi"}, "/tmp", "")))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -569,10 +627,10 @@ func TestASessionsModelsComeFromTheLaunchWindow(t *testing.T) {
 	x := ctx(c, "auto")
 	x.Model, x.Heavy, x.Background = "Qwen", "Big", ""
 	cmd := render(t, ClaudeCode, x, POSIX)
-	for _, want := range []string{"ANTHROPIC_MODEL=Qwen ", "ANTHROPIC_DEFAULT_SONNET_MODEL=Qwen ", "ANTHROPIC_DEFAULT_SONNET_MODEL_NAME=Qwen ",
-		"ANTHROPIC_DEFAULT_OPUS_MODEL=Big ", "ANTHROPIC_DEFAULT_OPUS_MODEL_NAME=Big ", "ANTHROPIC_DEFAULT_FABLE_MODEL=Big ", "ANTHROPIC_DEFAULT_FABLE_MODEL_NAME=Big ",
-		"ANTHROPIC_DEFAULT_HAIKU_MODEL=Qwen ", "ANTHROPIC_DEFAULT_HAIKU_MODEL_NAME=Qwen ", "ANTHROPIC_SMALL_FAST_MODEL=Qwen ",
-		"CLAUDE_CODE_MAX_CONTEXT_TOKENS=131072 ", "CLAUDE_CODE_AUTO_COMPACT_WINDOW=100000 "} {
+	for _, want := range []string{"ANTHROPIC_MODEL=Qwen\n", "ANTHROPIC_DEFAULT_SONNET_MODEL=Qwen\n", "ANTHROPIC_DEFAULT_SONNET_MODEL_NAME=Qwen\n",
+		"ANTHROPIC_DEFAULT_OPUS_MODEL=Big\n", "ANTHROPIC_DEFAULT_OPUS_MODEL_NAME=Big\n", "ANTHROPIC_DEFAULT_FABLE_MODEL=Big\n", "ANTHROPIC_DEFAULT_FABLE_MODEL_NAME=Big\n",
+		"ANTHROPIC_DEFAULT_HAIKU_MODEL=Qwen\n", "ANTHROPIC_DEFAULT_HAIKU_MODEL_NAME=Qwen\n", "ANTHROPIC_SMALL_FAST_MODEL=Qwen\n",
+		"CLAUDE_CODE_MAX_CONTEXT_TOKENS=131072\n", "CLAUDE_CODE_AUTO_COMPACT_WINDOW=100000\n"} {
 		if !strings.Contains(cmd, want) {
 			t.Errorf("missing %q:\n%s", want, cmd)
 		}

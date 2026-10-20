@@ -52,8 +52,8 @@ type Opener struct {
 
 // Open runs command (in the native shell's syntax) in a new terminal window
 // or tab in folder. pathDir, when set, goes first on PATH.
-func (o Opener) Open(command, folder, pathDir string) error {
-	return o.open(command, folder, pathDir)
+func (o Opener) Open(s Session, folder, pathDir string) error {
+	return o.open(s, folder, pathDir)
 }
 
 // --- macOS ---
