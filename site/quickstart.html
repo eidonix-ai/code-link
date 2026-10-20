@@ -15,8 +15,8 @@
 
   <h2 id="key">1 · Get your API key</h2>
   <ol class="steps">
-    <li>Open the join link your team gave you (it looks like <code>https://llm.eidonix.com/join/…</code>).</li>
-    <li>Enter your work email address and press the button.</li>
+    <li>Open <a href="https://llm.eidonix.com/join">llm.eidonix.com/join</a> (or the join link your team gave you).</li>
+    <li>Enter your work email address and press the button. (Only addresses your organisation has set up can get a key.)</li>
     <li>Open the email from <strong>no-reply@eidonix.com</strong> and click the link in it, then press <strong>Create my key</strong>.</li>
     <li>Copy the key it shows. It is shown only once — keep it somewhere safe, like a password manager. It is yours alone; don't share it.</li>
   </ol>
@@ -43,9 +43,14 @@
 
   <h2 id="code">4 · Start coding</h2>
   <ol class="steps">
-    <li>Click the code-link icon and choose <strong>Launch Claude Code…</strong> (or <strong>Launch Codex…</strong>).
-      If it isn't installed yet, code-link offers to install it — one click, no admin rights needed.</li>
-    <li>Pick your project's folder. A terminal window opens with the assistant running in that folder.</li>
+    <li>Click the code-link icon. If Claude Code (or Codex) isn't on your computer yet, choose <strong>Install Claude Code…</strong> —
+      one click, no admin rights needed. When a newer version is out, the menu offers <strong>Update</strong>.</li>
+    <li>Choose <strong>Launch Claude Code…</strong> (or <strong>Launch Codex…</strong>). A small window opens:
+      <ul>
+        <li><strong>Model</strong> — the server's recommended model is already picked; choose another to try it.</li>
+        <li><strong>Folder</strong> — your project's folder. code-link remembers the last one; press <strong>Change…</strong> to pick another.</li>
+      </ul>
+      Press <strong>Launch</strong>. A terminal window opens with the assistant running in that folder.</li>
     <li>Type what you want in plain words, for example:
       <ul>
         <li><em>"Explain how this project is organised."</em></li>
@@ -56,8 +61,7 @@
     <li>Watch it work. It reads files, edits them and runs commands in your project. Safe steps go ahead on their own;
       anything risky stops and asks you first. Press <kbd>Esc</kbd> to interrupt it at any time.</li>
   </ol>
-  <p>You can open as many sessions as you like — each launch opens another window. Recently used folders appear in the
-  code-link menu for one-click launching.</p>
+  <p>You can open as many sessions as you like — each launch opens another window, and each can use a different model.</p>
 
   <h2 id="tips">Tips</h2>
   <ul>
@@ -65,7 +69,7 @@
     <li><strong>Ask for a plan first</strong> on bigger jobs: <em>"Plan this change before editing anything."</em> In Claude Code, <kbd>Shift</kbd>+<kbd>Tab</kbd> switches between modes.</li>
     <li><strong>Documents and pictures:</strong> mention a PDF, screenshot or diagram by its file name (or drag it into the terminal) and ask about it.</li>
     <li><strong>The web:</strong> ask it to look something up ("check the latest version of this library") — it can search and read pages.</li>
-    <li><strong>A bigger model for hard problems:</strong> in Claude Code type <code>/model</code> and choose Opus; Sonnet is the everyday default.</li>
+    <li><strong>A bigger model for hard problems:</strong> in Claude Code type <code>/model</code> and choose Opus (set which model that is under <strong>More options</strong> in the launch window); Sonnet is the everyday default.</li>
     <li><strong>Use version control.</strong> In a git project, the assistant's changes are easy to review (<code>git diff</code>) and undo.</li>
     <li><strong>Updates:</strong> when a newer Claude Code or Codex is available, code-link shows an <strong>Update</strong> button in Settings.</li>
   </ul>
@@ -77,9 +81,8 @@
   <p>Check your internet connection. Some company networks or VPNs block new sites — ask IT to allow
   <code>llm.eidonix.com</code>.</p>
   <h3>The terminal opens and closes straight away</h3>
-  <p>Open Settings: if Claude Code or Codex shows as not installed, press <strong>Install</strong>. Otherwise use
-  <strong>Copy Claude Code Command</strong> from the code-link menu, paste it into a terminal yourself, and send the
-  message it prints to <a href="mailto:support@eidonix.com">support@eidonix.com</a>.</p>
+  <p>Open Settings: if Claude Code or Codex shows as not installed, press <strong>Install</strong> (or <strong>Update</strong>).
+  If it still closes, send a screenshot to <a href="mailto:support@eidonix.com">support@eidonix.com</a>.</p>
   <h3>Lost key, or a new computer</h3>
   <p>Open your join link and ask for a new key; paste it into code-link's Settings. Your old key stops working.</p>
 
