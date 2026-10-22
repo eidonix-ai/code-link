@@ -42,6 +42,10 @@
     return m.nativeClassifier ?? backend.nativeClassifier?.includes(m.upstream) ?? false;
   }
 
+  const providerModels = $derived((settings.draft.models ?? []).filter((m) => m.backend === backend.id));
+  const nativeHint =
+    "Claude Code's auto-approval checks are sent straight to this provider's Messages API, so it can reuse the session it already has cached instead of re-reading the whole conversation for every check. Only for models whose server supports it (Flare). Turned on automatically when the provider says it supports it.";
+
   const localDefault = "http://localhost:8000/v1";
 
   /** Switching to Go-LLM-Proxy fills in its address; switching away undoes that. */
@@ -130,17 +134,22 @@
         </div>
       </div>
 
-      {#each settings.draft.models ?? [] as m (m.id)}
-        {#if m.backend === backend.id}
-          <label class="field model">
-            <span></span>
-            <span class="check">
-              <input type="checkbox" checked={native(m)} onchange={(e) => (m.nativeClassifier = e.currentTarget.checked)} />
-              {m.id}: classify natively
-            </span>
-          </label>
-        {/if}
-      {/each}
+      {#if providerModels.length > 0}
+        <div class="field">
+          <span class="hinted" title={nativeHint}>Native auto-approval</span>
+          <div class="chips">
+            {#each providerModels.filter(native) as m (m.id)}
+              <span class="chip">{m.id}<button class="x" aria-label={"Turn off for " + m.id} onclick={() => (m.nativeClassifier = false)}>×</button></span>
+            {/each}
+            {#if providerModels.some((m) => !native(m))}
+              <select value="" onchange={(e) => { const m = providerModels.find((x) => x.id === e.currentTarget.value); if (m) m.nativeClassifier = true; e.currentTarget.value = ""; }}>
+                <option value="" disabled>Add model…</option>
+                {#each providerModels.filter((m) => !native(m)) as m (m.id)}<option value={m.id}>{m.id}</option>{/each}
+              </select>
+            {/if}
+          </div>
+        </div>
+      {/if}
 
       <div class="actions">
         <button class="link" onclick={() => settings.removeProvider(backend.id)}>Remove provider</button>
@@ -208,10 +217,32 @@
     gap: 10px;
     min-height: 24px;
   }
-  .check {
+  .hinted {
+    text-decoration: underline dashed;
+    text-underline-offset: 3px;
+    cursor: help;
+  }
+  .chips {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     gap: 6px;
+  }
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 1px 4px 1px 8px;
+    border: 1px solid var(--border, currentColor);
+    border-radius: 10px;
+  }
+  .chip .x {
+    height: auto;
+    min-height: 0;
+    padding: 0 4px;
+    border-width: 0;
+    background: none;
+    box-shadow: none;
     color: var(--secondary);
   }
   .actions {
