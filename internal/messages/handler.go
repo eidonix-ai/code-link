@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"codelink/internal/apierr"
+	"codelink/internal/automode"
 	"codelink/internal/config"
 	"codelink/internal/core"
 	"codelink/internal/hooks"
@@ -59,6 +60,16 @@ func Handle(env *core.Env, w http.ResponseWriter, r *http.Request, body []byte) 
 	// Claude Code's auto-mode classifier: answered by the decision head
 	// whatever model it names; a miss runs the same request on the
 	// decision model.
+	// A flagged model's backend takes it natively over /v1/messages (its
+	// prompt prefix is reused); a 4xx rejection falls through to the head.
+	if automode.IsClassifier(req) {
+		if m, ok := env.Routing.Resolve(requested); ok && m.NativeClassifier {
+			if t, ok := env.Routing.Target(m); ok && passthrough(env, w, r, body, "/messages", t, started, true) {
+				return
+			}
+		}
+	}
+
 	var forced *config.Model
 	if am := env.Hooks.AutoMode; am != nil && am.IsClassifierRequest(req) {
 		if answer := am.Respond(ctx, req); answer != nil {
@@ -88,7 +99,7 @@ func Handle(env *core.Env, w http.ResponseWriter, r *http.Request, body []byte) 
 		return
 	}
 	if target.IsAnthropic() {
-		passthrough(env, w, r, body, "/messages", target, started)
+		passthrough(env, w, r, body, "/messages", target, started, false)
 		return
 	}
 
@@ -220,8 +231,11 @@ func (c *call) run() {
 }
 
 // passthrough sends the request as it came to an Anthropic backend, only
-// the model name rewritten (every other byte as the client sent it).
-func passthrough(env *core.Env, w http.ResponseWriter, r *http.Request, body []byte, path string, t routing.Target, started time.Time) {
+// the model name rewritten (every other byte as the client sent it). With
+// native (a non-Anthropic backend asked for /v1/messages) it gives false,
+// having written nothing, when the backend rejects the request with a 4xx
+// other than 401, 403 or 429, so the caller can take the ordinary path.
+func passthrough(env *core.Env, w http.ResponseWriter, r *http.Request, body []byte, path string, t routing.Target, started time.Time, native bool) bool {
 	log := func(status int) {
 		env.Log.Record(hooks.Event{Kind: "request", Route: "/v1" + path, Model: t.Model.ID, Status: status, LatencyMS: sinceMS(started)})
 	}
@@ -229,27 +243,34 @@ func passthrough(env *core.Env, w http.ResponseWriter, r *http.Request, body []b
 	if err != nil {
 		log(400)
 		httpx.WriteAnthropic(w, apierr.Invalid("invalid JSON request body"))
-		return
+		return true
 	}
-	resp, err := env.Client.Send(r.Context(), t.AnthropicRequest(path, b, r.Header), env.HeaderTimeout())
+	ureq := t.AnthropicRequest(path, b, r.Header)
+	if native {
+		ureq = t.NativeMessagesRequest(b, r.Header)
+	}
+	resp, err := env.Client.Send(r.Context(), ureq, env.HeaderTimeout())
 	if err != nil {
 		e := apierr.Transport(err)
 		log(e.Status)
 		httpx.WriteAnthropic(w, e)
-		return
+		return true
 	}
 	defer resp.Close()
+	if native && resp.Status >= 400 && resp.Status < 500 && !slices.Contains([]int{401, 403, 429}, resp.Status) {
+		return false
+	}
 	if path == "/messages/count_tokens" && slices.Contains([]int{404, 405, 501}, resp.Status) {
 		log(200)
 		countEstimate(w, body)
-		return
+		return true
 	}
 	if resp.Status >= 400 {
 		data, _ := resp.Collect(1 << 20)
 		e := apierr.FromUpstream(resp.Status, data, resp.Header, true)
 		log(e.Status)
 		httpx.WriteAnthropic(w, e)
-		return
+		return true
 	}
 	h := apierr.RetryHeaders(resp.Header)
 	if id := resp.Header.Get("request-id"); id != "" {
@@ -266,14 +287,14 @@ func passthrough(env *core.Env, w http.ResponseWriter, r *http.Request, body []b
 				s.Raw(buf[:n])
 			}
 			if err != nil || s.Failed() {
-				return
+				return true
 			}
 		}
 	}
 	data, err := resp.Collect(0)
 	if err != nil {
 		httpx.WriteAnthropic(w, apierr.API(502, "failed to read the backend's response"))
-		return
+		return true
 	}
 	ct := resp.Header.Get("Content-Type")
 	if ct == "" {
@@ -285,6 +306,7 @@ func passthrough(env *core.Env, w http.ResponseWriter, r *http.Request, body []b
 	}
 	w.WriteHeader(resp.Status)
 	w.Write(data)
+	return true
 }
 
 var errNotObject = errors.New("not a JSON object")
@@ -342,7 +364,7 @@ func CountTokens(env *core.Env, w http.ResponseWriter, r *http.Request, body []b
 		return
 	}
 	if t, ok := env.Routing.Target(model); ok && t.IsAnthropic() {
-		passthrough(env, w, r, body, "/messages/count_tokens", t, time.Now())
+		passthrough(env, w, r, body, "/messages/count_tokens", t, time.Now(), false)
 		return
 	}
 	countEstimate(w, body)

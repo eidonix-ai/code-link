@@ -78,6 +78,10 @@ type Model struct {
 	Vision *bool `json:"vision,omitempty"`
 	// Logprobs nil = probe once.
 	Logprobs *bool `json:"logprobs,omitempty"`
+	// NativeClassifier sends Claude Code's auto-mode classifier requests to
+	// the backend's /v1/messages as they are (a Messages-capable backend that
+	// reuses the prompt prefix), instead of the decision head or translation.
+	NativeClassifier bool `json:"nativeClassifier,omitempty"`
 	// ThinkingOff is merged into a Chat Completions request when a client
 	// turns thinking off (e.g. {"reasoning_effort":"low"}).
 	ThinkingOff map[string]any `json:"thinkingOff,omitempty"`

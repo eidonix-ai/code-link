@@ -67,6 +67,21 @@ func (t Target) AnthropicRequest(path string, body []byte, client http.Header) u
 	return upstream.Request{URL: t.URL(path), Header: h, Body: body}
 }
 
+// NativeMessagesRequest is a /v1/messages request to a backend of any kind
+// (the base URL may or may not end in /v1), with Bearer credentials.
+func (t Target) NativeMessagesRequest(body []byte, client http.Header) upstream.Request {
+	req := t.AnthropicRequest("/messages", body, client)
+	base := strings.TrimRight(t.Backend.BaseURL, "/")
+	if !strings.HasSuffix(base, "/v1") {
+		base += "/v1"
+	}
+	req.URL = base + "/messages"
+	if t.Backend.APIKey != "" {
+		req.Header.Set("Authorization", "Bearer "+t.Backend.APIKey)
+	}
+	return req
+}
+
 // Routing resolves models for one configuration.
 type Routing struct{ Config *config.Config }
 

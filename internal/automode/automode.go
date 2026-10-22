@@ -87,7 +87,10 @@ type classified struct {
 }
 
 // IsClassifierRequest: whether an Anthropic Messages request is one.
-func (h *Head) IsClassifierRequest(request map[string]any) bool {
+func (h *Head) IsClassifierRequest(request map[string]any) bool { return IsClassifier(request) }
+
+// IsClassifier is IsClassifierRequest without a configured head.
+func IsClassifier(request map[string]any) bool {
 	_, ok := classify(request)
 	return ok
 }

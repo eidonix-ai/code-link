@@ -346,3 +346,67 @@ func TestAFailedLaterRoundIsAnInBandError(t *testing.T) {
 	eq(t, last(r.Events()).Event, "error", "last")
 	eq(t, str(last(r.Events()).Data, "error", "type"), "api_error", "type")
 }
+
+// MARK: native classifier
+
+const nativeAnswer = `{"id":"msg_n","type":"message","role":"assistant","model":"glm-upstream","content":[{"type":"text","text":"<severity>3"}],"stop_reason":"stop_sequence","stop_sequence":"</severity>","usage":{"input_tokens":9,"output_tokens":1}}`
+
+func nativeClassifier(c *config.Config, trimV1 bool) {
+	c.Models[0].NativeClassifier = true
+	if trimV1 {
+		c.Backends[0].BaseURL = strings.TrimSuffix(c.Backends[0].BaseURL, "/v1")
+	}
+}
+
+func TestFlaggedModelsTakeClassifierRequestsNatively(t *testing.T) {
+	for _, trim := range []bool{false, true} {
+		am := &fakeAutoMode{answer: classifierAnswer()}
+		h := harness.Run(t, harness.Options{
+			Hooks:     hooks.Hooks{AutoMode: am},
+			Configure: func(c *config.Config) { nativeClassifier(c, trim) },
+		}, func(testkit.Seen, int) testkit.Reply { return testkit.JSONR(200, nativeAnswer) })
+		r := messages(t, h, classifierBody)
+		eq(t, r.Status, 200, "status")
+		eq(t, str(r.JSON(), "content", 0, "text"), "<severity>3", "native answer")
+		reqs := h.Stub.Requests()
+		eq(t, len(reqs), 1, "one backend call")
+		eq(t, reqs[0].Path, "/v1/messages", "path")
+		eq(t, reqs[0].Header.Get("anthropic-version"), "2023-06-01", "default version")
+		eq(t, str(reqs[0].JSON(), "model"), "glm-upstream", "renamed model")
+		eq(t, am.responded(), 0, "decision head not called")
+	}
+}
+
+func TestUnflaggedOrOrdinaryRequestsKeepTheirPath(t *testing.T) {
+	am := &fakeAutoMode{answer: classifierAnswer()}
+	h := harness.Run(t, harness.Options{Hooks: hooks.Hooks{AutoMode: am}}, harness.OK)
+	messages(t, h, classifierBody)
+	eq(t, am.responded(), 1, "unflagged: head answers")
+	eq(t, len(h.Stub.Requests()), 0, "unflagged: no backend call")
+
+	h = harness.Run(t, harness.Options{Configure: func(c *config.Config) { nativeClassifier(c, false) }}, harness.OK)
+	messages(t, h, testkit.MessagesBody("", "claude-sonnet-5", false, ""))
+	eq(t, len(h.Stub.ChatRequests()), 1, "ordinary request is translated")
+	eq(t, h.Stub.Requests()[0].Path, "/v1/chat/completions", "chat path")
+}
+
+func TestNativeClassifierRejectionFallsBack(t *testing.T) {
+	for status, falls := range map[int]bool{400: true, 422: true, 401: false, 429: false} {
+		am := &fakeAutoMode{answer: classifierAnswer()}
+		h := harness.Run(t, harness.Options{
+			Hooks:     hooks.Hooks{AutoMode: am},
+			Configure: func(c *config.Config) { nativeClassifier(c, false) },
+		}, func(testkit.Seen, int) testkit.Reply { return testkit.JSONR(status, `{"error":"no"}`) })
+		r := messages(t, h, classifierBody)
+		if falls {
+			eq(t, r.Status, 200, "fallback status")
+			eq(t, str(r.JSON(), "content", 0, "text"), "<severity>12", "head answer")
+			eq(t, am.responded(), 1, "head called")
+		} else {
+			if r.Status < 400 { // the gateway's usual mapping of the backend's error
+				t.Errorf("status %d: got %d, want an error", status, r.Status)
+			}
+			eq(t, am.responded(), 0, "no fallback")
+		}
+	}
+}
