@@ -19,7 +19,7 @@ import (
 )
 
 // CheckInterval is how often the feed is checked after the check at start.
-const CheckInterval = 6 * time.Hour
+const CheckInterval = 30 * time.Minute
 
 const (
 	checkTimeout    = 30 * time.Second

@@ -261,8 +261,8 @@ func TestDisabledBuildsNeverCheck(t *testing.T) {
 	}
 }
 
-func TestWatchChecksAtStartAndEverySixHours(t *testing.T) {
-	if CheckInterval != 6*time.Hour {
+func TestWatchChecksAtStartAndEveryHalfHour(t *testing.T) {
+	if CheckInterval != 30*time.Minute {
 		t.Fatalf("CheckInterval = %v", CheckInterval)
 	}
 	f := newFeed(t)
@@ -290,7 +290,7 @@ func TestWatchChecksAtStartAndEverySixHours(t *testing.T) {
 	mu.Lock()
 	defer mu.Unlock()
 	for _, d := range asked {
-		if d != 6*time.Hour {
+		if d != CheckInterval {
 			t.Errorf("waited %v between checks", d)
 		}
 	}
