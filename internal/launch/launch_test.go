@@ -62,7 +62,9 @@ export ANTHROPIC_SMALL_FAST_MODEL=Tiny
 export CLAUDE_CODE_AUTO_MODE_SERVER=0
 export CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1
 export API_TIMEOUT_MS=900000
+export CLAUDE_CODE_ATTRIBUTION_HEADER=0
 export CLAUDE_CODE_MAX_CONTEXT_TOKENS=1048576
+export CLAUDE_CODE_MAX_OUTPUT_TOKENS=128000
 export CLAUDE_CODE_AUTO_COMPACT_WINDOW=891289
 claude --permission-mode auto --settings '/Users/d/Library/Application Support/Eidonix/code-link/claude-settings.json'`
 	if got != want {

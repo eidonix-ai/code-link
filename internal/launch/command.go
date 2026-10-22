@@ -113,10 +113,14 @@ func claude(c Context) Invocation {
 		{"CLAUDE_CODE_AUTO_MODE_SERVER", "0"},
 		{"CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC", "1"},
 		{"API_TIMEOUT_MS", "900000"},
+		{"CLAUDE_CODE_ATTRIBUTION_HEADER", "0"},
 	}
 	if m, ok := c.Config.Model(main); ok {
 		if m.ContextWindow != nil && *m.ContextWindow > 0 {
 			env = append(env, Var{"CLAUDE_CODE_MAX_CONTEXT_TOKENS", strconv.Itoa(*m.ContextWindow)})
+		}
+		if n := m.MaxOutputTokens(); n > 0 {
+			env = append(env, Var{"CLAUDE_CODE_MAX_OUTPUT_TOKENS", strconv.Itoa(n)})
 		}
 		if n := m.EffectiveAutoCompactAt(); n > 0 {
 			env = append(env, Var{"CLAUDE_CODE_AUTO_COMPACT_WINDOW", strconv.Itoa(n)})

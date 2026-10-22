@@ -20,6 +20,7 @@ import (
 type ProbedModel struct {
 	Upstream      string `json:"upstream"`
 	ContextWindow *int   `json:"contextWindow,omitempty"`
+	MaxOutput     *int   `json:"maxOutput,omitempty"`
 	Logprobs      *bool  `json:"logprobs,omitempty"`
 	Vision        *bool  `json:"vision,omitempty"`
 }
@@ -177,6 +178,12 @@ func ListModels(ctx context.Context, client *upstream.Client, b config.Backend, 
 		for _, path := range [][]any{{"max_model_len"}, {"context_length"}, {"context_window"}, {"max_input_tokens"}, {"meta", "n_ctx_train"}} {
 			if n, ok := jsonx.Int(jsonx.Get(m, path...)); ok && n > 0 {
 				p.ContextWindow = &n
+				break
+			}
+		}
+		for _, path := range [][]any{{"max_output_tokens"}, {"max_completion_tokens"}, {"flare", "default_max_tokens"}} {
+			if n, ok := jsonx.Int(jsonx.Get(m, path...)); ok && n > 0 {
+				p.MaxOutput = &n
 				break
 			}
 		}

@@ -77,6 +77,8 @@ type Model struct {
 	Upstream string `json:"upstream"`
 	// ContextWindow nil = detect from the backend's /models (max_model_len).
 	ContextWindow *int `json:"contextWindow,omitempty"`
+	// MaxOutput nil = detect from the backend's /models; else the context window.
+	MaxOutput *int `json:"maxOutput,omitempty"`
 	// AutoCompactAt nil = 85% of the context window.
 	AutoCompactAt *int `json:"autoCompactAt,omitempty"`
 	// Vision nil = probe on the first image.
@@ -103,6 +105,22 @@ func (m Model) NativeClassifierOn(b Backend) bool {
 }
 
 // EffectiveAutoCompactAt is where Claude Code should compact.
+// claudeOutputCeiling is the most Claude Code accepts in
+// CLAUDE_CODE_MAX_OUTPUT_TOKENS for a model it doesn't know.
+const claudeOutputCeiling = 128000
+
+// MaxOutputTokens is the model's output limit for Claude Code: the backend's
+// own limit, else its context window, at most Claude Code's ceiling; 0 if unknown.
+func (m Model) MaxOutputTokens() int {
+	n := 0
+	if m.MaxOutput != nil {
+		n = *m.MaxOutput
+	} else if m.ContextWindow != nil {
+		n = *m.ContextWindow
+	}
+	return min(n, claudeOutputCeiling)
+}
+
 func (m Model) EffectiveAutoCompactAt() int {
 	if m.AutoCompactAt != nil {
 		return *m.AutoCompactAt

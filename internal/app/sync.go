@@ -50,6 +50,9 @@ func SyncModels(c *config.Config, id string, p core.Probe) {
 		listed[pm.Upstream] = true
 		if i := findModel(c, Choice{id, pm.Upstream}); i >= 0 {
 			m := &c.Models[i]
+			if pm.MaxOutput != nil {
+				m.MaxOutput = pm.MaxOutput
+			}
 			if pm.ContextWindow != nil {
 				m.ContextWindow = pm.ContextWindow
 			}
