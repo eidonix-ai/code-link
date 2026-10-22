@@ -1,6 +1,6 @@
 <script lang="ts">
   import { settings } from "../lib/state.svelte";
-  import type { Backend, Probe } from "../lib/api";
+  import type { Backend, Model, Probe } from "../lib/api";
   import Dot from "./Dot.svelte";
   import Note from "./Note.svelte";
 
@@ -35,6 +35,11 @@
     const g = p?.gateway;
     if (!g) return "";
     return [g.webSearch ? "web search" : "", g.documents ? "documents" : ""].filter((x) => x).join(" · ");
+  }
+
+  /** Whether Claude Code's auto-mode classifier goes to this model's provider as is. */
+  function native(m: Model): boolean {
+    return m.nativeClassifier ?? backend.nativeClassifier?.includes(m.upstream) ?? false;
   }
 
   const localDefault = "http://localhost:8000/v1";
@@ -125,6 +130,18 @@
         </div>
       </div>
 
+      {#each settings.draft.models ?? [] as m (m.id)}
+        {#if m.backend === backend.id}
+          <label class="field model">
+            <span></span>
+            <span class="check">
+              <input type="checkbox" checked={native(m)} onchange={(e) => (m.nativeClassifier = e.currentTarget.checked)} />
+              {m.id}: classify natively
+            </span>
+          </label>
+        {/if}
+      {/each}
+
       <div class="actions">
         <button class="link" onclick={() => settings.removeProvider(backend.id)}>Remove provider</button>
       </div>
@@ -190,6 +207,12 @@
     justify-content: space-between;
     gap: 10px;
     min-height: 24px;
+  }
+  .check {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--secondary);
   }
   .actions {
     display: flex;

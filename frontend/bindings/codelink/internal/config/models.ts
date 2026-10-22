@@ -15,6 +15,13 @@ export interface Backend {
      * (upstream names, from its /v1/capabilities), kept from the last sync.
      */
     "recommended"?: Recommended | null;
+
+    /**
+     * NativeClassifier are the upstream names of the models a gateway's
+     * operator has set up to take Claude Code's classifier requests natively
+     * (from its /v1/capabilities), kept from the last sync.
+     */
+    "nativeClassifier"?: string[] | null;
 }
 
 export enum BackendKind {
@@ -176,6 +183,14 @@ export interface Model {
      * Logprobs nil = probe once.
      */
     "logprobs"?: boolean | null;
+
+    /**
+     * NativeClassifier sends Claude Code's auto-mode classifier requests to
+     * the backend's /v1/messages as they are (a Messages-capable backend that
+     * reuses the prompt prefix), instead of the decision head or translation.
+     * nil = what the gateway says (Backend.NativeClassifier), else off.
+     */
+    "nativeClassifier"?: boolean | null;
 
     /**
      * ThinkingOff is merged into a Chat Completions request when a client

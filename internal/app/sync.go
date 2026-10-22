@@ -76,13 +76,14 @@ func SyncModels(c *config.Config, id string, p core.Probe) {
 		if c.Backends[i].ID != id {
 			continue
 		}
-		c.Backends[i].Recommended = nil
+		c.Backends[i].Recommended, c.Backends[i].NativeClassifier = nil, nil
 		if g := p.Gateway; g != nil {
 			d := g.Defaults
 			r := config.Recommended{Main: d.Main, Opus: d.Opus, Small: d.Small, Decision: d.Decision, Vision: d.Vision, Codex: d.Codex}
 			if r != (config.Recommended{}) {
 				c.Backends[i].Recommended = &r
 			}
+			c.Backends[i].NativeClassifier = g.NativeClassifier
 		}
 	}
 	ApplyRoles(c)
@@ -209,7 +210,7 @@ func (a *App) SyncAll(ctx context.Context) {
 	cur.Models, cur.Roles = cfg.Models, cfg.Roles
 	for i := range cur.Backends {
 		if b, ok := cfg.Backend(cur.Backends[i].ID); ok {
-			cur.Backends[i].Recommended = b.Recommended
+			cur.Backends[i].Recommended, cur.Backends[i].NativeClassifier = b.Recommended, b.NativeClassifier
 		}
 	}
 	a.saveSynced(cur)

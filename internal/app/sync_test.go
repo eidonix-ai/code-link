@@ -191,3 +191,33 @@ func TestSyncAllSavesTheProvidersModels(t *testing.T) {
 		t.Error("keyless")
 	}
 }
+
+func TestSyncKeepsGatewayNativeClassifierList(t *testing.T) {
+	c := gw()
+	id := config.DefaultGatewayID
+	p := probeOf([]core.ProbedModel{{Upstream: "A"}, {Upstream: "B"}}, &core.GatewayDefaults{})
+	p.Gateway.NativeClassifier = []string{"A"}
+	SyncModels(&c, id, p)
+	a, _ := c.Model("A")
+	b, _ := c.Model("B")
+	if be := c.Backends[0]; !a.NativeClassifierOn(be) || b.NativeClassifierOn(be) {
+		t.Fatalf("gateway list: A %v B %v", a.NativeClassifierOn(be), b.NativeClassifierOn(be))
+	}
+	// An explicit choice wins either way.
+	off, on := false, true
+	c.Models[0].NativeClassifier, c.Models[1].NativeClassifier = &off, &on
+	SyncModels(&c, id, p)
+	a, _ = c.Model("A")
+	b, _ = c.Model("B")
+	if be := c.Backends[0]; a.NativeClassifierOn(be) || !b.NativeClassifierOn(be) {
+		t.Fatalf("user choice: A %v B %v", a.NativeClassifierOn(be), b.NativeClassifierOn(be))
+	}
+	// The gateway drops A: with no choice made it follows.
+	c.Models[0].NativeClassifier = nil
+	p.Gateway.NativeClassifier = nil
+	SyncModels(&c, id, p)
+	a, _ = c.Model("A")
+	if a.NativeClassifierOn(c.Backends[0]) {
+		t.Fatal("follows the gateway off")
+	}
+}

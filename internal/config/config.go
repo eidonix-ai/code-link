@@ -12,6 +12,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 )
 
@@ -51,6 +52,10 @@ type Backend struct {
 	// Recommended are the models a gateway's operator recommends per role
 	// (upstream names, from its /v1/capabilities), kept from the last sync.
 	Recommended *Recommended `json:"recommended,omitempty"`
+	// NativeClassifier are the upstream names of the models a gateway's
+	// operator has set up to take Claude Code's classifier requests natively
+	// (from its /v1/capabilities), kept from the last sync.
+	NativeClassifier []string `json:"nativeClassifier,omitempty"`
 }
 
 // Recommended are upstream model names per role.
@@ -81,10 +86,20 @@ type Model struct {
 	// NativeClassifier sends Claude Code's auto-mode classifier requests to
 	// the backend's /v1/messages as they are (a Messages-capable backend that
 	// reuses the prompt prefix), instead of the decision head or translation.
-	NativeClassifier bool `json:"nativeClassifier,omitempty"`
+	// nil = what the gateway says (Backend.NativeClassifier), else off.
+	NativeClassifier *bool `json:"nativeClassifier,omitempty"`
 	// ThinkingOff is merged into a Chat Completions request when a client
 	// turns thinking off (e.g. {"reasoning_effort":"low"}).
 	ThinkingOff map[string]any `json:"thinkingOff,omitempty"`
+}
+
+// NativeClassifierOn is whether classifier requests for m go to its backend
+// b natively: the user's choice, else the gateway's.
+func (m Model) NativeClassifierOn(b Backend) bool {
+	if m.NativeClassifier != nil {
+		return *m.NativeClassifier
+	}
+	return slices.Contains(b.NativeClassifier, m.Upstream)
 }
 
 // EffectiveAutoCompactAt is where Claude Code should compact.

@@ -20,6 +20,12 @@ export interface Gateway {
      * may use); nil = the operator marked none, so code-link decides.
      */
     "models"?: string[] | null;
+
+    /**
+     * NativeClassifier are the models (that this key may use) its operator
+     * has set up to take Claude Code's classifier requests natively.
+     */
+    "nativeClassifier"?: string[] | null;
 }
 
 /**

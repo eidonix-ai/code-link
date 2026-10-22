@@ -46,6 +46,9 @@ type Gateway struct {
 	// Models are the ones its operator offers in code-link (that this key
 	// may use); nil = the operator marked none, so code-link decides.
 	Models []string `json:"models,omitempty"`
+	// NativeClassifier are the models (that this key may use) its operator
+	// has set up to take Claude Code's classifier requests natively.
+	NativeClassifier []string `json:"nativeClassifier,omitempty"`
 }
 
 // GatewayDefaults are recommended model ids for code-link's roles.
@@ -86,6 +89,13 @@ func ProbeGateway(ctx context.Context, client *upstream.Client, b config.Backend
 		for _, m := range list {
 			if s := jsonx.Str(m); s != "" {
 				g.Models = append(g.Models, s)
+			}
+		}
+	}
+	if list, ok := j["native_classifier_models"].([]any); ok {
+		for _, m := range list {
+			if s := jsonx.Str(m); s != "" {
+				g.NativeClassifier = append(g.NativeClassifier, s)
 			}
 		}
 	}

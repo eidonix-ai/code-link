@@ -352,7 +352,8 @@ func TestAFailedLaterRoundIsAnInBandError(t *testing.T) {
 const nativeAnswer = `{"id":"msg_n","type":"message","role":"assistant","model":"glm-upstream","content":[{"type":"text","text":"<severity>3"}],"stop_reason":"stop_sequence","stop_sequence":"</severity>","usage":{"input_tokens":9,"output_tokens":1}}`
 
 func nativeClassifier(c *config.Config, trimV1 bool) {
-	c.Models[0].NativeClassifier = true
+	on := true
+	c.Models[0].NativeClassifier = &on
 	if trimV1 {
 		c.Backends[0].BaseURL = strings.TrimSuffix(c.Backends[0].BaseURL, "/v1")
 	}

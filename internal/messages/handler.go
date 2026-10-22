@@ -63,8 +63,8 @@ func Handle(env *core.Env, w http.ResponseWriter, r *http.Request, body []byte) 
 	// A flagged model's backend takes it natively over /v1/messages (its
 	// prompt prefix is reused); a 4xx rejection falls through to the head.
 	if automode.IsClassifier(req) {
-		if m, ok := env.Routing.Resolve(requested); ok && m.NativeClassifier {
-			if t, ok := env.Routing.Target(m); ok && passthrough(env, w, r, body, "/messages", t, started, true) {
+		if m, ok := env.Routing.Resolve(requested); ok {
+			if t, ok := env.Routing.Target(m); ok && m.NativeClassifierOn(t.Backend) && passthrough(env, w, r, body, "/messages", t, started, true) {
 				return
 			}
 		}
