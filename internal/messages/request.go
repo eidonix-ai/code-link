@@ -18,8 +18,12 @@ type webSearchTool struct {
 }
 
 const (
-	webSearchFunction      = "web_search"
-	webSearchDefaultMaxUse = 5
+	webSearchFunction = "web_search"
+	// webSearchMaxUses caps the searches of one request. A request's
+	// max_uses can lower it but not raise it: Claude Code sends 8, and a
+	// chat model given that many tends to spend them on near-duplicate
+	// rewordings of one query (every search is a paid provider call).
+	webSearchMaxUses = 5
 )
 
 func stringList(v any) []string {
@@ -43,8 +47,8 @@ func findWebSearch(tools []any) *webSearchTool {
 			continue
 		}
 		n, _ := jsonx.Int(jsonx.Get(t, "max_uses"))
-		if n <= 0 {
-			n = webSearchDefaultMaxUse
+		if n <= 0 || n > webSearchMaxUses {
+			n = webSearchMaxUses
 		}
 		return &webSearchTool{maxUses: n, allowedDomains: stringList(jsonx.Get(t, "allowed_domains")),
 			blockedDomains: stringList(jsonx.Get(t, "blocked_domains"))}

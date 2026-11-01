@@ -254,7 +254,9 @@ Claude Code's WebSearch is a separate streaming request whose only tool is
 call, search with the configured provider — Tavily (`POST https://api.tavily.com/search`) or Brave (`GET https://api.search.brave.com/res/v1/web/search`, header `X-Subscription-Token`); key in the Keychain; ~5 results —, stream `server_tool_use`
 (`srvtoolu_…`, name `web_search`) + `web_search_tool_result` (results:
 `{type: web_search_result, url, title, page_age?, encrypted_content}`), feed
-results back to the model and continue; respect `max_uses` (default 5);
+results back to the model and continue. At most 5 searches per request:
+`max_uses` can lower that but not raise it (Claude Code sends 8). A round's
+searches run concurrently; results keep the model's call order;
 usage `server_tool_use.web_search_requests`. No provider/key / error →
 `web_search_tool_result_error` (`unavailable` / `too_many_requests` /
 `max_uses_exceeded`) and the model answers anyway. Replay earlier

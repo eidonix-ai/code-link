@@ -6,6 +6,7 @@ import (
 	"errors"
 	"strconv"
 	"strings"
+	"sync"
 
 	"codelink/internal/apierr"
 	"codelink/internal/hooks"
@@ -154,23 +155,34 @@ type searchRunner struct {
 	succeeded int
 }
 
-// answer answers the model's web_search calls, in order.
+// answer answers the model's web_search calls. Which calls run is decided
+// in order (the first max_uses run); the searches that run go out
+// concurrently, and the outcomes keep the calls' order.
 func (r *searchRunner) answer(ctx context.Context, calls []searchCall) []searchOutcome {
-	var out []searchOutcome
-	for _, c := range calls {
+	out := make([]searchOutcome, len(calls))
+	var run []int
+	for i, c := range calls {
 		query := strings.TrimSpace(jsonx.Str(jsonx.Get(jsonx.ParseObject([]byte(c.args)), "query")))
-		o := searchOutcome{id: ids.New("srvtoolu_"), callID: c.id, query: query}
+		out[i] = searchOutcome{id: ids.New("srvtoolu_"), callID: c.id, query: query}
 		switch {
 		case query == "":
-			o.errorCode = searchInvalidInput
+			out[i].errorCode = searchInvalidInput
 		case r.searched >= r.tool.maxUses:
-			o.errorCode = searchMaxUsesExceeded
+			out[i].errorCode = searchMaxUsesExceeded
 		case r.searcher == nil:
 			r.searched++
-			o.errorCode = searchUnavailable
+			out[i].errorCode = searchUnavailable
 		default:
 			r.searched++
-			hits, err := r.searcher.Search(ctx, query, r.tool.allowedDomains, r.tool.blockedDomains)
+			run = append(run, i)
+		}
+	}
+	var wg sync.WaitGroup
+	for _, i := range run {
+		wg.Add(1)
+		go func(o *searchOutcome) {
+			defer wg.Done()
+			hits, err := r.searcher.Search(ctx, o.query, r.tool.allowedDomains, r.tool.blockedDomains)
 			switch {
 			case errors.Is(err, hooks.ErrSearchTooManyRequests):
 				o.errorCode = searchTooManyRequests
@@ -181,11 +193,15 @@ func (r *searchRunner) answer(ctx context.Context, calls []searchCall) []searchO
 					hits = hits[:hitsPerSearch]
 				}
 				o.hits = hits
-				r.succeeded++
-				r.log.Record(hooks.Event{Kind: "websearch", Query: query, Results: len(hits)})
 			}
+		}(&out[i])
+	}
+	wg.Wait()
+	for _, i := range run {
+		if out[i].errorCode == "" {
+			r.succeeded++
+			r.log.Record(hooks.Event{Kind: "websearch", Query: out[i].query, Results: len(out[i].hits)})
 		}
-		out = append(out, o)
 	}
 	return out
 }
